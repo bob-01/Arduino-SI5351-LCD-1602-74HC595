@@ -1,7 +1,3 @@
-/*
-  15.12.2017 Добавляю задержку прием/передача
-*/
-
 #include "si5351.h"
 #include "Wire.h"
 #include "ShiftedLCD.h"
@@ -10,17 +6,14 @@
 #define pin_A          3
 #define pin_B          2
 
-#define Button_TX      7 
-#define Button_Step    8 
-#define Button_VCXO    9
-
-#define Button_RIT     10
-#define TX_out         11
+#define BUTTON_STEP    7 
+#define BUTTON_VCXO    8
+#define BUTTON_TX      9 
+#define BUTTON_RIT     10
+#define TX_OUT         11
 #define tone_pin       12
 
 #define Smeter         A0
-#define FRD            A3
-#define REV            A2
 
 Si5351 si5351;
 
@@ -28,47 +21,38 @@ Si5351 si5351;
 LiquidCrystal lcd(4,5,6);
 
 unsigned long currentTime,loopTime;
-unsigned long IF,IF2, XTAL, Fmin, Fmax, Ftx, Frit, STEP;
+unsigned long IF, IF2, Fmin, Fmax, Ftx, Frit, STEP;
 long Fcorr;
 
 boolean enc_block=false, enc_flag=false, rit_flag=false, Button_flag=false, tx_flag=false, vcxo_flag=false, step_flag=false, rewrite_flag=false, setup_flag=false, ftone_flag=false;
 
-uint8_t count_avr=0, smeter_count=0, Enc_state, Enc_last, step_count=3, menu_count=0, setup_count=8, xF=1, SI5351_DRIVE_CLK0, SI5351_DRIVE_CLK1, SI5351_DRIVE_CLK2, SI5351_CAPACITOR_LOAD; // 0 ..255
+uint8_t XTAL, count_avr=0, smeter_count=0, Enc_state, Enc_last, step_count=3, menu_count=0, setup_count=8, xF=1, SI5351_DRIVE_CLK0, SI5351_DRIVE_CLK1, SI5351_DRIVE_CLK2;
 int8_t enc_move=0, mode=1;
 
-// Mode = 1 RX
-// Mode = 2 TX
-// Mode = 1 Setup
-
-uint16_t Ftone,uFRD,uREV,uSMETER;
+uint16_t Ftone,uSMETER;
 
 void setup(){
 
   pinMode(pin_A, INPUT);
   pinMode(pin_B, INPUT);
-  pinMode(Button_VCXO, INPUT);
-  pinMode(Button_Step, INPUT);
-  pinMode(Button_TX, INPUT);
-  pinMode(Button_RIT, INPUT);
-  pinMode(TX_out, OUTPUT);
+  pinMode(BUTTON_VCXO, INPUT);
+  pinMode(BUTTON_STEP, INPUT);
+  pinMode(BUTTON_TX, INPUT);
+  pinMode(BUTTON_RIT, INPUT);
+  pinMode(TX_OUT, OUTPUT);
   pinMode(tone_pin, OUTPUT); //объявляем пин как выход для звука
 
   digitalWrite(pin_A, HIGH);
   digitalWrite(pin_B, HIGH); 
-  digitalWrite(Button_VCXO, HIGH); 
-  digitalWrite(Button_Step, HIGH); 
-  digitalWrite(Button_TX, HIGH); 
-  digitalWrite(Button_RIT, HIGH);
-  digitalWrite(TX_out, LOW);
+  digitalWrite(BUTTON_VCXO, HIGH); 
+  digitalWrite(BUTTON_STEP, HIGH); 
+  digitalWrite(BUTTON_TX, HIGH); 
+  digitalWrite(BUTTON_RIT, HIGH);
+  digitalWrite(TX_OUT, LOW);
     
   Read_Value_EEPROM();
 
-  switch (SI5351_CAPACITOR_LOAD){
-                             case  0: si5351.init(SI5351_CRYSTAL_LOAD_0PF, XTAL, Fcorr); break;
-                             case  6: si5351.init(SI5351_CRYSTAL_LOAD_6PF, XTAL, Fcorr); break;
-                             case  8: si5351.init(SI5351_CRYSTAL_LOAD_8PF, XTAL, Fcorr); break;
-                             case  10: si5351.init(SI5351_CRYSTAL_LOAD_10PF, XTAL, Fcorr); break;
-  }
+  si5351.init(SI5351_CRYSTAL_LOAD_0PF, XTAL*1000000, Fcorr);
 
   switch (SI5351_DRIVE_CLK0){
                              case  2: si5351.drive_strength(SI5351_CLK0, SI5351_DRIVE_2MA); break;
@@ -107,23 +91,17 @@ void loop(){
 //-------------------Проверка каждые 3 мс
       if(currentTime >= (loopTime + 3)) // проверяем каждые 5мс (200 Гц)
       {
-            Check_enc();
-              
-              test();        
-         
-         smeter_count ++;
-         loopTime = currentTime; // Счетчик прошедшего времени      
+        Check_enc();
+        test();        
+        smeter_count++;
+        loopTime = currentTime; // Счетчик прошедшего времени      
       }
 //-------------------Конец проверка каждые 3 мс
 
     if ( (smeter_count%100 == 0) and !setup_flag) {
           
         count_avr++;
-        if (tx_flag) {
-            uFRD += analogRead(FRD);
-            uREV += analogRead(REV);
-        }
-        else {
+        if (!tx_flag) {
             uSMETER += analogRead(Smeter);
         }
 
@@ -132,28 +110,7 @@ void loop(){
           smeter_count = 0;
           count_avr = 0;
 
-                if (tx_flag) {
-                  uFRD = uFRD/10;
-                  uREV = uREV/10;
-
-                        lcd.setCursor(0,1);
-                        lcd.print("P");
-                        lcd.print("    ");
-                        lcd.setCursor(1,1);
-                        lcd.print(uFRD);
-                        
-                        lcd.setCursor(5,1);
-                        lcd.print("F");
-                        lcd.print("   ");
-                        lcd.setCursor(6,1);
-                        lcd.print(uREV);
-        
-                        lcd.setCursor(9,1);
-                        lcd.print("SWR");
-                        lcd.print( (float(uFRD+uREV)/(uFRD-uREV)) );
-                        lcd.print("   ");
-                }
-                else {
+                if (!tx_flag) {
                   uSMETER = uSMETER/10;
                   lcd.setCursor(0,1);
                   lcd.print(uSMETER); 
@@ -187,96 +144,92 @@ void loop(){
               enc_flag = false;
           }
     }//End Step flag
-    
     if (setup_flag){
         F_setup();
     }
-    
 }//End loop
 
 void test(){
+  // Проверка кнопок
+  if (Button_flag == 0)
+  {
+      if (digitalRead(BUTTON_TX) == 0){
+          Button_flag = true;
+          F_tx();
+      }//End BUTTON_TX
 
-             // Проверка кнопок
-              if (Button_flag == 0)
-              {
-               
-                 if (digitalRead(Button_TX) == 0){
-                      Button_flag = true;
-                      F_tx();
-                 }//End Button_Tx
+      if (digitalRead(BUTTON_STEP) == 0){
+          Button_flag = true;
+          step_flag = !step_flag;
+          enc_block = !enc_block;
+          if(setup_flag){enc_block = true;}
+          
+      }//End BUTTON_STEP
 
-                 if (digitalRead(Button_Step) == 0){
-                      Button_flag = true;
-                      step_flag = !step_flag;
-                      enc_block = !enc_block;
-                      if(setup_flag){enc_block = true;}
-                      
-                 }//End Button_Step
+      if (digitalRead(BUTTON_VCXO) == 0){
+            Button_flag = true;                 
+            vcxo_flag = !vcxo_flag;
+            F_if2();
 
-                 if (digitalRead(Button_VCXO) == 0){
-                       Button_flag = true;                 
-                       vcxo_flag = !vcxo_flag;
-                       F_if2();
+      }//End BUTTON_VCXO
+      
+      if (digitalRead(BUTTON_RIT) == 0){
+            Button_flag = true;                 
+            rit_flag = !rit_flag;
+            menu_count = 0;
 
-                 }//End Button_VCXO
-                 
-                 if (digitalRead(Button_RIT) == 0){
-                       Button_flag = true;                 
-                       rit_flag = !rit_flag;
-                       menu_count = 0;
+      }//End BUTTON_RIT
 
-                 }//End Button_RIT
+  }
 
-             }
+  if (digitalRead(BUTTON_TX) == 1 && digitalRead(BUTTON_STEP) == 1 && digitalRead(BUTTON_VCXO) == 1 && digitalRead(BUTTON_RIT) == 1 && Button_flag == true)
+  {
+          Button_flag = false;
+          if ( menu_count > 0 && menu_count < 128 && setup_flag == false){
+              F_rit();
+          }
+  }
 
-             if (digitalRead(Button_TX) == 1 && digitalRead(Button_Step) == 1 && digitalRead(Button_VCXO) == 1 && digitalRead(Button_RIT) == 1 && Button_flag == true)
-             {
-                      Button_flag = false;
-                      if ( menu_count > 0 && menu_count < 128 && setup_flag == false){
-                          F_rit();
-                      }
-             }
-
-             if ( digitalRead(Button_RIT) == 0 && Button_flag == true && menu_count < 255 ){
-                     menu_count++;
-                     if (menu_count == 254){
-                         if(setup_flag){
-                             lcd.clear();
-                             enc_block = false;
-                             F_print();
-                             step_flag = 1;
-                             rewrite_flag = 1;
-                             setup_flag=false; 
-                         }
-                         else{
-                             enc_flag = true;
-                             F_setup();
-                         }
-                 }
-             }
-            //конец проверок кнопок
-
-             if (enc_flag && enc_block == 0)
-             {
-                    if(rit_flag == false)
-                    {
-                          Ftx += (STEP*100)*enc_move;
-                            if (Ftx < Fmin){ Ftx = Fmin; }
-                            if (Ftx > Fmax){ Ftx = Fmax; }
-                          Frit = Ftx;
-                    }
-                    else
-                    {
-                            Frit = Frit + (STEP*100)*enc_move;
-                            if (Frit < Fmin){ Frit = Fmin; }
-                            if (Frit > Fmax){ Frit = Fmax; }
-                    }
-
-                    si5351.set_freq(Frit+IF, SI5351_CLK0 );
-                    enc_flag = false;
-                
+  if ( digitalRead(BUTTON_RIT) == 0 && Button_flag == true && menu_count < 255 ){
+          menu_count++;
+          if (menu_count == 254){
+              if(setup_flag){
+                  lcd.clear();
+                  enc_block = false;
                   F_print();
+                  step_flag = 1;
+                  rewrite_flag = 1;
+                  setup_flag=false; 
               }
+              else{
+                  enc_flag = true;
+                  F_setup();
+              }
+      }
+  }
+//конец проверок кнопок
+
+  if (enc_flag && enc_block == 0)
+  {
+        if(rit_flag == false)
+        {
+              Ftx += (STEP*100)*enc_move;
+                if (Ftx < Fmin){ Ftx = Fmin; }
+                if (Ftx > Fmax){ Ftx = Fmax; }
+              Frit = Ftx;
+        }
+        else
+        {
+                Frit = Frit + (STEP*100)*enc_move;
+                if (Frit < Fmin){ Frit = Fmin; }
+                if (Frit > Fmax){ Frit = Fmax; }
+        }
+
+        si5351.set_freq(Frit+IF, SI5351_CLK0 );
+        enc_flag = false;
+    
+      F_print();
+  }
 }
 
 void F_print(){
@@ -315,7 +268,8 @@ void Read_Value_EEPROM()
 /*
   EEPROM
   0-3   ( 4 Byte) IF
-  4-7   ( 4 Byte) XTAL
+  4     ( 1 Byte) XTAL
+  5-7    NULL
   8-11  ( 4 Byte) Fmin
   12-15 ( 4 Byte) Fmax
   16-19 ( 4 Byte) Fcorr
@@ -324,7 +278,7 @@ void Read_Value_EEPROM()
   26    ( 1 Byte) SI5351_DRIVE_CLK0   2MA 4MA 6MA 8MA 
   27    ( 1 Byte) SI5351_DRIVE_CLK1
   28    ( 1 Byte) SI5351_DRIVE_CLK2
-  29    ( 1 Byte) SI5351_CAPACITOR_LOAD 0pF 6pF 8pF 10pF
+  29    NULL
   30-33 ( 4 Byte) IF2
   34    ( 1 Byte) x*F
 */
@@ -333,9 +287,9 @@ void Read_Value_EEPROM()
         IF = 0;
         EEPROM.put(0, IF);
       }
-      EEPROM.get(4, XTAL);   //XTAL = 27000000;
-      if (XTAL > 4000000000){
-        XTAL = 27000000;
+      EEPROM.get(4, XTAL);   //XTAL = 27
+      if (XTAL > 50){
+        XTAL = 27;
         EEPROM.put(4, XTAL);
       }
       EEPROM.get(8, Fmin);   //Fmin = 2.5кГц
@@ -382,11 +336,6 @@ void Read_Value_EEPROM()
         SI5351_DRIVE_CLK2 = 2;
         EEPROM.put(28, SI5351_DRIVE_CLK2);
       }
-      EEPROM.get(29, SI5351_CAPACITOR_LOAD); // Crystal load capacitor
-      if (SI5351_CAPACITOR_LOAD > 10){
-        SI5351_CAPACITOR_LOAD = 0;
-        EEPROM.put(29, SI5351_CAPACITOR_LOAD);
-      }
       EEPROM.get(30, IF2);
       if (IF2 > 4000000000){
         IF2 = 45000000;
@@ -404,21 +353,17 @@ void Read_Value_EEPROM()
 }// End Read EEPROM
 
 void Check_enc(){
-
-               Enc_state = PIND&B00001100;
-               enc_move = 0;
-               
-               if( Enc_state != Enc_last ){
-
-					switch (Enc_state){
-                                                case  4: if(Enc_last == 12) enc_move=1; if(Enc_last == 8)  enc_move=-1; break;
-                                                case  8: if(Enc_last == 4)  enc_move=1; if(Enc_last == 12) enc_move=-1; break;
-                                                case 12: if(Enc_last == 8)  enc_move=1; if(Enc_last == 4)  enc_move=-1; break;
-  					}
-                  Enc_last = Enc_state;
-                  enc_flag = true;
-               }//End Проверка состояния encoder
-
+  Enc_state = PIND&B00001100;
+  enc_move = 0;
+  
+  if( Enc_state != Enc_last ){
+        if(Enc_last == 12){
+              if(Enc_state == 4) enc_move=-1;
+              if(Enc_state == 8) enc_move=1;
+        }
+    Enc_last = Enc_state;
+    enc_flag = true;
+  }//End Проверка состояния encoder
 }//End Check Enc
 
 void F_tx(){
@@ -426,24 +371,22 @@ void F_tx(){
   enc_block = !enc_block;
   tx_flag = !tx_flag;
                       if (tx_flag == true){
-                            si5351.output_enable(SI5351_CLK0, 0);
-                            digitalWrite(TX_out, HIGH);
-                            lcd.setCursor(0,1);
-                            lcd.print("TX");
-                            delay(100);
-                            si5351.set_freq(Ftx*xF, SI5351_CLK1 );
-                            si5351.output_enable(SI5351_CLK1, 1);
+                        si5351.output_enable(SI5351_CLK0, 0);
+                        si5351.set_freq(Ftx*xF, SI5351_CLK1 );
+                        si5351.output_enable(SI5351_CLK1, 1);
+                        lcd.setCursor(0,1);
+                        lcd.print("TX");
+                        digitalWrite(TX_OUT, HIGH);
                       }
                       else{
-                           si5351.output_enable(SI5351_CLK1, 0);
-                           lcd.setCursor(0,1);
-                           lcd.print("                ");
-                           delay(100);
-                           digitalWrite(TX_out, LOW);
-                           si5351.set_freq(Frit+IF, SI5351_CLK0); //Set RX
-                           si5351.output_enable(SI5351_CLK0, 1);
-                           step_flag = 1;
-                           rewrite_flag = 1; 
+                        digitalWrite(TX_OUT, LOW);
+                        lcd.setCursor(0,1);
+                        lcd.print("                ");
+                        si5351.output_enable(SI5351_CLK1, 0);
+                        si5351.set_freq(Frit+IF, SI5351_CLK0); //Set RX
+                        si5351.output_enable(SI5351_CLK0, 1);
+                        step_flag = 1;
+                        rewrite_flag = 1; 
                       }
 }//End F tx
 
@@ -504,7 +447,7 @@ void F_setup(){
         else{
 	            switch (setup_count){
                              case  1: IF+=(STEP*100)*enc_move; if(IF > 4200000000) IF = 0; if(IF > 4000000000) IF = 4000000000; break;
-                             case  2: XTAL+=(STEP)*enc_move; if(XTAL > 45000000) XTAL=45000000; break;
+                             case  2: XTAL+=enc_move; if(XTAL > 50) XTAL=50; break;
                              case  3: Fmin+=(STEP*100)*enc_move; if(Fmin < 250000) Fmin=250000; break;
                              case  4: Fmax+=(STEP*100)*enc_move; if(Fmax > 4000000000) Fmax=4000000000; break;
                              case  5: Fcorr+=(STEP/10)*enc_move; if(Fcorr > 10000000) Fcorr=10000000; if(Fcorr < -10000000) Fcorr=-10000000;  break;
@@ -517,7 +460,6 @@ void F_setup(){
                              case  12: SI5351_DRIVE_CLK0+=enc_move*2; if(SI5351_DRIVE_CLK0 < 2) SI5351_DRIVE_CLK0 = 2; if(SI5351_DRIVE_CLK0 > 8) SI5351_DRIVE_CLK0 = 8;   break;
                              case  13: SI5351_DRIVE_CLK1+=enc_move*2; if(SI5351_DRIVE_CLK1 < 2) SI5351_DRIVE_CLK1 = 2; if(SI5351_DRIVE_CLK1 > 8) SI5351_DRIVE_CLK1 = 8;   break;
                              case  14: SI5351_DRIVE_CLK2+=enc_move*2; if(SI5351_DRIVE_CLK2 < 2) SI5351_DRIVE_CLK2 = 2; if(SI5351_DRIVE_CLK2 > 8) SI5351_DRIVE_CLK2 = 8;   break;
-                             case  15: SI5351_CAPACITOR_LOAD+=enc_move*2; if(SI5351_CAPACITOR_LOAD < 6) SI5351_CAPACITOR_LOAD = 0; if(SI5351_CAPACITOR_LOAD > 10) SI5351_CAPACITOR_LOAD = 10; break;
                              case  16: IF2+=(STEP*100)*enc_move; if(IF2 > 4200000000) IF2 = 0; if(IF2 > 4000000000) IF2 = 4000000000; break;
                     }
         }
@@ -525,7 +467,7 @@ void F_setup(){
                 lcd.setCursor(0,0);
 	            switch (setup_count){
                              case  1:    lcd.print("IF");lcd.setCursor(0,1);lcd.print(IF/100); break;
-                             case  2:    lcd.print("XTAL");lcd.setCursor(0,1);lcd.print(XTAL); break;
+                             case  2:    lcd.print("XTAL");lcd.setCursor(0,1);lcd.print(XTAL);lcd.print("MHz"); break;
                              case  3:    lcd.print("Fmin");lcd.setCursor(0,1);lcd.print(Fmin/100); break;
                              case  4:    lcd.print("Fmax");lcd.setCursor(0,1);lcd.print(Fmax/100); break;
                              case  5:    lcd.print("Fcorr");lcd.setCursor(0,1);lcd.print(Fcorr); break;
@@ -538,7 +480,6 @@ void F_setup(){
                              case  12:   lcd.print("DRIVE_CLK0"); lcd.setCursor(0,1);lcd.print(SI5351_DRIVE_CLK0);break;
                              case  13:   lcd.print("DRIVE_CLK1"); lcd.setCursor(0,1);lcd.print(SI5351_DRIVE_CLK1);break;
                              case  14:   lcd.print("DRIVE_CLK2"); lcd.setCursor(0,1);lcd.print(SI5351_DRIVE_CLK2);break;
-                             case  15:   lcd.print("CAPACITOR_LOAD"); lcd.setCursor(0,1);lcd.print(SI5351_CAPACITOR_LOAD);break;
                              case  16:   lcd.print("IF2");lcd.setCursor(0,1);lcd.print(IF2/100); break;
                     }
        enc_flag = false;
@@ -605,13 +546,6 @@ long temp_l=0;
         SI5351_DRIVE_CLK2 = temp;
         EEPROM.put(28, SI5351_DRIVE_CLK2);
       }
-      
-      temp = SI5351_CAPACITOR_LOAD;      
-      EEPROM.get(29, SI5351_CAPACITOR_LOAD); // Crystal load capacitor
-      if (SI5351_CAPACITOR_LOAD != temp){
-        SI5351_CAPACITOR_LOAD = temp;
-        EEPROM.put(29, SI5351_CAPACITOR_LOAD);
-      }
 
       EEPROM.get(30, temp);
       if (IF2 != temp){
@@ -624,8 +558,6 @@ long temp_l=0;
         xF = temp;
         EEPROM.put(34, xF);
       }
-
-
 }
 
 //----------------------------
