@@ -28,6 +28,7 @@ boolean enc_block=false, enc_flag=false, rit_flag=false, Button_flag=false, tx_f
 
 uint8_t XTAL, count_avr=0, smeter_count=0, Enc_state, Enc_last, step_count=3, menu_count=0, setup_count=8, xF=1, SI5351_DRIVE_CLK0, SI5351_DRIVE_CLK1, SI5351_DRIVE_CLK2;
 int8_t enc_move=0, mode=1;
+int8_t ENC_SPIN = 1;
 
 uint16_t Ftone,uSMETER;
 
@@ -278,7 +279,7 @@ void Read_Value_EEPROM()
   26    ( 1 Byte) SI5351_DRIVE_CLK0   2MA 4MA 6MA 8MA 
   27    ( 1 Byte) SI5351_DRIVE_CLK1
   28    ( 1 Byte) SI5351_DRIVE_CLK2
-  29    NULL
+  29    ( 1 Byte) ENC_SPIN
   30-33 ( 4 Byte) IF2
   34    ( 1 Byte) x*F
 */
@@ -336,6 +337,11 @@ void Read_Value_EEPROM()
         SI5351_DRIVE_CLK2 = 2;
         EEPROM.put(28, SI5351_DRIVE_CLK2);
       }
+      EEPROM.get(29, ENC_SPIN); // Driver current
+      if (ENC_SPIN > 1 || ENC_SPIN < -1){
+        ENC_SPIN = 1;
+        EEPROM.put(29, ENC_SPIN);
+      }
       EEPROM.get(30, IF2);
       if (IF2 > 4000000000){
         IF2 = 45000000;
@@ -358,8 +364,8 @@ void Check_enc(){
   
   if( Enc_state != Enc_last ){
         if(Enc_last == 12){
-              if(Enc_state == 4) enc_move=-1;
-              if(Enc_state == 8) enc_move=1;
+              if(Enc_state == 4) enc_move=-1*ENC_SPIN;
+              if(Enc_state == 8) enc_move=1*ENC_SPIN;
         }
     Enc_last = Enc_state;
     enc_flag = true;
@@ -460,6 +466,7 @@ void F_setup(){
                              case  12: SI5351_DRIVE_CLK0+=enc_move*2; if(SI5351_DRIVE_CLK0 < 2) SI5351_DRIVE_CLK0 = 2; if(SI5351_DRIVE_CLK0 > 8) SI5351_DRIVE_CLK0 = 8;   break;
                              case  13: SI5351_DRIVE_CLK1+=enc_move*2; if(SI5351_DRIVE_CLK1 < 2) SI5351_DRIVE_CLK1 = 2; if(SI5351_DRIVE_CLK1 > 8) SI5351_DRIVE_CLK1 = 8;   break;
                              case  14: SI5351_DRIVE_CLK2+=enc_move*2; if(SI5351_DRIVE_CLK2 < 2) SI5351_DRIVE_CLK2 = 2; if(SI5351_DRIVE_CLK2 > 8) SI5351_DRIVE_CLK2 = 8;   break;
+                             case  15: if(enc_move == 1) ENC_SPIN = 1; if(enc_move == -1) ENC_SPIN = -1; break;
                              case  16: IF2+=(STEP*100)*enc_move; if(IF2 > 4200000000) IF2 = 0; if(IF2 > 4000000000) IF2 = 4000000000; break;
                     }
         }
@@ -480,6 +487,7 @@ void F_setup(){
                              case  12:   lcd.print("DRIVE_CLK0"); lcd.setCursor(0,1);lcd.print(SI5351_DRIVE_CLK0);break;
                              case  13:   lcd.print("DRIVE_CLK1"); lcd.setCursor(0,1);lcd.print(SI5351_DRIVE_CLK1);break;
                              case  14:   lcd.print("DRIVE_CLK2"); lcd.setCursor(0,1);lcd.print(SI5351_DRIVE_CLK2);break;
+                             case  15:   lcd.print("ENC_SPIN"); lcd.setCursor(0,1);lcd.print(ENC_SPIN);break;
                              case  16:   lcd.print("IF2");lcd.setCursor(0,1);lcd.print(IF2/100); break;
                     }
        enc_flag = false;
@@ -545,6 +553,13 @@ long temp_l=0;
       if (SI5351_DRIVE_CLK2 != temp){
         SI5351_DRIVE_CLK2 = temp;
         EEPROM.put(28, SI5351_DRIVE_CLK2);
+      }
+
+      temp = ENC_SPIN;
+      EEPROM.get(29, ENC_SPIN);
+      if (ENC_SPIN != temp){
+        ENC_SPIN = temp;
+        EEPROM.put(29, ENC_SPIN);
       }
 
       EEPROM.get(30, temp);
