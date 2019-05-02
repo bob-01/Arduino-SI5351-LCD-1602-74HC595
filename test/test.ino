@@ -126,8 +126,8 @@ void loop() {
       if(enc_flag || rewrite_flag) {
         lcd.setCursor(10,1);
         step_count = step_count+enc_move;
-        if (step_count > 6){ step_count = 6;};
-        if (step_count == 0){ step_count = 1;};
+        if (step_count > 6) { step_count = 6;};
+        if (step_count == 0) { step_count = 1;};
 
         switch (step_count) {
           case  1: STEP=10;       lcd.print("  10"); break;   //10Hz
@@ -182,54 +182,49 @@ void CHECK_BUTTON_PRESS() {
   }
 
   if (digitalRead(BUTTON_TX) == 1 && digitalRead(BUTTON_STEP) == 1 && digitalRead(BUTTON_VCXO) == 1 && digitalRead(BUTTON_RIT) == 1 && Button_flag == true) {
-    Button_flag = false;
+      Button_flag = false;
     if ( menu_count > 0 && menu_count < 128 && setup_flag == false){
-        F_rit();
+      F_rit();
     }
   }
 
-  if ( digitalRead(BUTTON_RIT) == 0 && Button_flag == true && menu_count < 255 ){
-          menu_count++;
-          if (menu_count == 254){
-              if(setup_flag){
-                  lcd.clear();
-                  enc_block = false;
-                  F_print();
-                  step_flag = 1;
-                  rewrite_flag = 1;
-                  setup_flag=false; 
-              }
-              else{
-                  enc_flag = true;
-                  F_setup();
-              }
+  if ( digitalRead(BUTTON_RIT) == 0 && Button_flag == true && menu_count < 255 ) {
+      menu_count++;
+    if (menu_count == 254) {
+      if(setup_flag) {
+        lcd.clear();
+        enc_block = false;
+        F_print();
+        step_flag = 1;
+        rewrite_flag = 1;
+        setup_flag=false; 
+      } else {
+        enc_flag = true;
+        F_setup();
       }
+    }
   }
 //конец проверок кнопок
 
-  if (enc_flag && enc_block == 0)
-  {
-        if(rit_flag == false)
-        {
-              Ftx += (STEP*100)*enc_move;
-                if (Ftx < Fmin){ Ftx = Fmin; }
-                if (Ftx > Fmax){ Ftx = Fmax; }
-              Frit = Ftx;
-        }
-        else {
-          Frit = Frit + (STEP*100)*enc_move;
-          if (Frit < Fmin){ Frit = Fmin; }
-          if (Frit > Fmax){ Frit = Fmax; }
-        }
+  if (enc_flag && enc_block == 0) {
+    if(rit_flag == false) {
+      Ftx += (STEP*100)*enc_move;
+        if (Ftx < Fmin){ Ftx = Fmin; }
+        if (Ftx > Fmax){ Ftx = Fmax; }
+      Frit = Ftx;
+    } else {
+      Frit = Frit + (STEP*100)*enc_move;
+      if (Frit < Fmin){ Frit = Fmin; }
+      if (Frit > Fmax){ Frit = Fmax; }
+    }
 
-        si5351.set_freq(Frit+IF, SI5351_CLK0 );
-        enc_flag = false;
-      F_print();
+    si5351.set_freq(Frit+IF, SI5351_CLK0 );
+    enc_flag = false;
+    F_print();
   }
 }
 
 void F_print() {
-
   uint16_t mid;
   //3.110.000.00
   //9999.000.00
@@ -377,11 +372,11 @@ void F_tx() {
   tx_flag = !tx_flag;
 
   if (tx_flag == true) {
-    si5351.output_enable(SI5351_CLK0, 0);
+    // si5351.output_enable(SI5351_CLK0, 0);
     si5351.set_freq(Ftx*xF, SI5351_CLK1 );
     si5351.output_enable(SI5351_CLK1, 1);
     lcd.setCursor(0,1);
-    lcd.print("TX");
+    lcd.print("TX  ");
     digitalWrite(TX_OUT, HIGH);
   }
   else {
@@ -389,8 +384,8 @@ void F_tx() {
     lcd.setCursor(0,1);
     lcd.print("                ");
     si5351.output_enable(SI5351_CLK1, 0);
-    si5351.set_freq(Frit+IF, SI5351_CLK0); //Set RX
-    si5351.output_enable(SI5351_CLK0, 1);
+    // si5351.set_freq(Frit+IF, SI5351_CLK0); //Set RX
+    // si5351.output_enable(SI5351_CLK0, 1);
     step_flag = 1;
     rewrite_flag = 1; 
   }
@@ -583,3 +578,4 @@ void softReset(){
   asm volatile ("  jmp 0");
 
 }//End soft reset
+
