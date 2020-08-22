@@ -90,20 +90,19 @@ void setup() {
 }
 
 void loop() {
- currentTime = millis();
-//-------------------Проверка каждые 3 мс
-      if(currentTime >= (loopTime + 3)) // проверяем каждые 3мс (xxx Гц)
-      {
-        Check_enc();
-        CHECK_BUTTON_PRESS();        
-        smeter_count++;
-        loopTime = currentTime; // Счетчик прошедшего времени      
-      }
-//-------------------Конец проверка каждые 3 мс
+  currentTime = millis();
 
-    if ( (smeter_count%100 == 0) and !setup_flag) {
-          
+  // Проверка каждые 5 мс
+  if(currentTime >= (loopTime + 5)) {
+    Check_enc();
+    CHECK_BUTTON_PRESS();        
+    smeter_count++;
+    loopTime = currentTime; // Счетчик прошедшего времени      
+  }
+
+    if ( (smeter_count % 70 == 0) and !setup_flag) {
         count_avr++;
+
         if (!tx_flag) {
             uSMETER += analogRead(Smeter);
         }
@@ -252,8 +251,7 @@ void F_print() {
   lcd.print( mid%10);
 }//end f_print
 
-void Read_Value_EEPROM()
-{
+void Read_Value_EEPROM() {
 /*
   EEPROM
   0-3   ( 4 Byte) IF
@@ -357,22 +355,22 @@ void Check_enc() {
   enc_move = 0;
   
   if( Enc_state != Enc_last ){
-        if(Enc_last == 12){
-              if(Enc_state == 4) enc_move=-1*ENC_SPIN;
-              if(Enc_state == 8) enc_move=1*ENC_SPIN;
-        }
+    if(Enc_last == 12){
+      if(Enc_state == 4) enc_move=-1*ENC_SPIN;
+      if(Enc_state == 8) enc_move=1*ENC_SPIN;
+    }
+
     Enc_last = Enc_state;
     enc_flag = true;
-  }//End Проверка состояния encoder
-}//End Check Enc
+  }
+}
 
 void F_tx() {
+  if(enc_block) return;
 
-  enc_block = !enc_block;
   tx_flag = !tx_flag;
 
   if (tx_flag == true) {
-    // si5351.output_enable(SI5351_CLK0, 0);
     si5351.set_freq(Ftx*xF, SI5351_CLK1 );
     si5351.output_enable(SI5351_CLK1, 1);
     lcd.setCursor(0,1);
@@ -384,8 +382,6 @@ void F_tx() {
     lcd.setCursor(0,1);
     lcd.print("                ");
     si5351.output_enable(SI5351_CLK1, 0);
-    // si5351.set_freq(Frit+IF, SI5351_CLK0); //Set RX
-    // si5351.output_enable(SI5351_CLK0, 1);
     step_flag = 1;
     rewrite_flag = 1; 
   }
@@ -393,15 +389,14 @@ void F_tx() {
 
 void F_if2() {
   if (vcxo_flag == true) {
-        si5351.set_freq(IF2, SI5351_CLK2 );
-        si5351.output_enable(SI5351_CLK2, 1);
-        lcd.setCursor(14,0);
-        lcd.print("IF");
-  }
-  else{
-          si5351.output_enable(SI5351_CLK2, 0);
-          lcd.setCursor(13,0);
-          lcd.print("   "); 
+      si5351.set_freq(IF2, SI5351_CLK2 );
+      si5351.output_enable(SI5351_CLK2, 1);
+      lcd.setCursor(14,0);
+      lcd.print("IF");
+  } else {
+      si5351.output_enable(SI5351_CLK2, 0);
+      lcd.setCursor(13,0);
+      lcd.print("   "); 
   }
 }//End F if
 
@@ -409,8 +404,7 @@ void F_rit() {
   if (rit_flag == true) {
         lcd.setCursor(10,0);
         lcd.print("RIT");
-  }
-  else {
+  } else {
     Frit = Ftx;
     si5351.set_freq(Frit+IF, SI5351_CLK0 );
     lcd.setCursor(10,0);
@@ -572,10 +566,6 @@ long temp_l=0;
       }
 }
 
-//----------------------------
 void softReset(){
-
   asm volatile ("  jmp 0");
-
-}//End soft reset
-
+}
