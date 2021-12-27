@@ -1,10 +1,12 @@
+#define VERSION   "2.01a"
+
 #include "si5351.h"
 #include "Wire.h"
 #include "ShiftedLCD.h"
 #include <EEPROM.h> // Для работы со встроенной памятью ATmega
 
-#define pin_A          3
-#define pin_B          2
+#define PIN_A          3
+#define PIN_B          2
 
 #define BUTTON_STEP    7 
 #define BUTTON_VCXO    8
@@ -26,7 +28,7 @@ unsigned long currentTime,loopTime;
 unsigned long IF, IF2, Fmin, Fmax, Ftx, Frit, STEP;
 long Fcorr;
 
-boolean enc_block=false, enc_flag=false, rit_flag=false, Button_flag=false, tx_flag=false, vcxo_flag=false, step_flag=false, rewrite_flag=false, setup_flag=false;
+boolean resetFlag, enc_block=false, enc_flag=false, rit_flag=false, Button_flag=false, tx_flag=false, vcxo_flag=false, step_flag=false, rewrite_flag=false, setup_flag=false;
 uint8_t IF_WIDTH_FLAG = false;
 
 uint8_t XTAL, count_avr=0, smeter_count=0, Enc_state, Enc_last, step_count=3, menu_count=0, setup_count=8, xF=1, SI5351_DRIVE_CLK0, SI5351_DRIVE_CLK1, SI5351_DRIVE_CLK2;
@@ -38,8 +40,14 @@ uint16_t Ftone,uSMETER;
 
 void setup() {
 
-  pinMode(pin_A, INPUT);
-  pinMode(pin_B, INPUT);
+  pinMode(PIN_A, INPUT);
+  pinMode(PIN_B, INPUT);
+  digitalWrite(PIN_A, HIGH);
+  digitalWrite(PIN_B, HIGH); 
+
+  attachInterrupt(0, int0, CHANGE);
+  attachInterrupt(1, int0, CHANGE);
+
   pinMode(BUTTON_VCXO, INPUT);
   pinMode(BUTTON_STEP, INPUT);
   pinMode(BUTTON_TX, INPUT);
@@ -49,8 +57,6 @@ void setup() {
   pinMode(IF_WIDTH_PIN, OUTPUT); //объявляем пин как выход для изменения ширины ПЧ
   pinMode(BUTTON_TONE, INPUT_PULLUP);
 
-  digitalWrite(pin_A, HIGH);
-  digitalWrite(pin_B, HIGH); 
   digitalWrite(BUTTON_VCXO, HIGH); 
   digitalWrite(BUTTON_STEP, HIGH); 
   digitalWrite(BUTTON_TX, HIGH); 
@@ -92,12 +98,28 @@ void setup() {
   loopTime = currentTime; 
 }
 
+void int0() {
+  encTick();
+}
+
+// алгоритм со сбросом от Ярослава Куруса
+void encTick() {
+  Enc_state = digitalRead(PIN_A) | digitalRead(PIN_B) << 1;  // digitalRead хорошо бы заменить чем-нибудь более быстрым
+  if (resetFlag && Enc_state == 0b11) {
+    if (Enc_last == 0b10) enc_move=1*ENC_SPIN;
+    if (Enc_last == 0b01) enc_move=-1*ENC_SPIN;
+    resetFlag = 0;
+    enc_flag = true;
+  }
+  if (Enc_state == 0b00) resetFlag = 1;
+  Enc_last = Enc_state;
+}
+
 void loop() {
   currentTime = millis();
 
   // Проверка каждые 5 мс
   if(currentTime >= (loopTime + 5)) {
-    Check_enc();
     CHECK_BUTTON_PRESS();        
     smeter_count++;
     loopTime = currentTime; // Счетчик прошедшего времени      
@@ -370,21 +392,6 @@ void Read_Value_EEPROM() {
       STEP = 1000;
       Frit = Ftx;
 }// End Read EEPROM
-
-void Check_enc() {
-  Enc_state = PIND&B00001100;
-  enc_move = 0;
-  
-  if( Enc_state != Enc_last ){
-    if(Enc_last == 12){
-      if(Enc_state == 4) enc_move=-1*ENC_SPIN;
-      if(Enc_state == 8) enc_move=1*ENC_SPIN;
-    }
-
-    Enc_last = Enc_state;
-    enc_flag = true;
-  }
-}
 
 void F_tx() {
   if(enc_block) return;
