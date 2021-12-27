@@ -1,12 +1,16 @@
 #define VERSION   "2.01a"
 
-#include "si5351.h"
-#include "Wire.h"
-#include "ShiftedLCD.h"
-#include <EEPROM.h> // Для работы со встроенной памятью ATmega
+//#define SWAP_ROTARY             1 // Swap rotary direction
 
-#define PIN_A          3
-#define PIN_B          2
+#define ROT_A     2       //PD2
+#define ROT_B     3       //PD3
+
+#ifdef SWAP_ROTARY
+#undef ROT_A
+#undef ROT_B
+#define ROT_A   3
+#define ROT_B   2
+#endif
 
 #define BUTTON_STEP    7 
 #define BUTTON_VCXO    8
@@ -18,6 +22,11 @@
 
 #define Smeter         A0
 #define BUTTON_TONE    A1
+
+#include "si5351.h"
+#include "Wire.h"
+#include "ShiftedLCD.h"
+#include <EEPROM.h> // Для работы со встроенной памятью ATmega
 
 Si5351 si5351;
 
@@ -40,10 +49,10 @@ uint16_t Ftone,uSMETER;
 
 void setup() {
 
-  pinMode(PIN_A, INPUT);
-  pinMode(PIN_B, INPUT);
-  digitalWrite(PIN_A, HIGH);
-  digitalWrite(PIN_B, HIGH); 
+  pinMode(ROT_A, INPUT);
+  pinMode(ROT_B, INPUT);
+  digitalWrite(ROT_A, HIGH);
+  digitalWrite(ROT_B, HIGH); 
 
   attachInterrupt(0, int0, CHANGE);
   attachInterrupt(1, int0, CHANGE);
@@ -104,7 +113,7 @@ void int0() {
 
 // алгоритм со сбросом от Ярослава Куруса
 void encTick() {
-  Enc_state = digitalRead(PIN_A) | digitalRead(PIN_B) << 1;  // digitalRead хорошо бы заменить чем-нибудь более быстрым
+  Enc_state = digitalRead(ROT_A) | digitalRead(ROT_B) << 1;  // digitalRead хорошо бы заменить чем-нибудь более быстрым
   if (resetFlag && Enc_state == 0b11) {
     if (Enc_last == 0b10) enc_move=1*ENC_SPIN;
     if (Enc_last == 0b01) enc_move=-1*ENC_SPIN;
