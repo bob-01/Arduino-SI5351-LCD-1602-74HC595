@@ -1,51 +1,7 @@
-#define VERSION   "2.01a"
-
-//#define SWAP_ROTARY             1 // Swap rotary direction
-
-#define ROT_A     2       //PD2
-#define ROT_B     3       //PD3
-
-#ifdef SWAP_ROTARY
-#undef ROT_A
-#undef ROT_B
-#define ROT_A   3
-#define ROT_B   2
-#endif
-
-#define BUTTON_STEP    7 
-#define BUTTON_VCXO    8
-#define BUTTON_TX      9 
-#define BUTTON_RIT     10
-#define TX_OUT         11
-#define tone_pin       12
-#define IF_WIDTH_PIN   13
-
-#define Smeter         A0
-#define BUTTON_TONE    A1
-
-#include "si5351.h"
-#include "Wire.h"
-#include "ShiftedLCD.h"
-#include <EEPROM.h> // Для работы со встроенной памятью ATmega
-
-Si5351 si5351;
+#include "main.h"
 
 // data_pin(rs)(orange), clk_pin (purpur) , enable_pin (red)
-LiquidCrystal lcd(4,5,6);
-
-unsigned long currentTime,loopTime;
-unsigned long IF, IF2, Fmin, Fmax, Ftx, Frit, STEP;
-long Fcorr;
-
-boolean resetFlag, enc_block=false, enc_flag=false, rit_flag=false, Button_flag=false, tx_flag=false, vcxo_flag=false, step_flag=false, rewrite_flag=false, setup_flag=false;
-uint8_t IF_WIDTH_FLAG = false;
-
-uint8_t XTAL, count_avr=0, smeter_count=0, Enc_state, Enc_last, step_count=3, menu_count=0, setup_count=8, xF=1, SI5351_DRIVE_CLK0, SI5351_DRIVE_CLK1, SI5351_DRIVE_CLK2;
-uint8_t ftone_flag=false;
-int8_t enc_move=0, mode=1;
-int8_t ENC_SPIN = 1;
-
-uint16_t Ftone,uSMETER;
+LiquidCrystal lcd(4, 5, 6);
 
 void setup() {
 
@@ -64,7 +20,10 @@ void setup() {
   pinMode(TX_OUT, OUTPUT);
   pinMode(tone_pin, OUTPUT); //объявляем пин как выход для звука
   pinMode(IF_WIDTH_PIN, OUTPUT); //объявляем пин как выход для изменения ширины ПЧ
-  pinMode(BUTTON_TONE, INPUT_PULLUP);
+
+  #ifdef BUTTON_TONE_ENABLE
+      pinMode(BUTTON_TONE, INPUT_PULLUP);
+  #endif
 
   digitalWrite(BUTTON_VCXO, HIGH); 
   digitalWrite(BUTTON_STEP, HIGH); 
@@ -134,7 +93,7 @@ void loop() {
     loopTime = currentTime; // Счетчик прошедшего времени      
   }
 
-    if ( (smeter_count % 100 == 0) and !setup_flag) {
+    if ( (smeter_count % 100 == 0) && !setup_flag) {
         count_avr++;
 
         if (!tx_flag) {
@@ -186,18 +145,23 @@ void loop() {
 }//End loop
 
 void CHECK_BUTTON_PRESS() {
-  if(digitalRead(BUTTON_TONE) == 0) {
-    if(!ftone_flag) {
-      ftone_flag = true;
-      tone(tone_pin, Ftone);
-    }
-  }
-  else {
-    if(ftone_flag) {
-      ftone_flag = false;
-      noTone(tone_pin);
-    }
-  }
+  #ifdef BUTTON_TONE_ENABLE
+      if(!digitalRead(BUTTON_TONE)) event = BT;
+      
+      if(event == BT && !BUTTON_TONE_FLAG)
+      {
+          BUTTON_TONE_FLAG = true;
+          tone(tone_pin, Ftone);
+      }
+
+      if(event != BT && BUTTON_TONE_FLAG)
+      {
+          BUTTON_TONE_FLAG = false;
+          noTone(tone_pin);
+      }
+  #endif
+
+  event = 0;
 
   // Проверка кнопок
   if (Button_flag == 0) {
@@ -233,7 +197,7 @@ void CHECK_BUTTON_PRESS() {
     }
   }
 
-  if ( digitalRead(BUTTON_RIT) == 0 && Button_flag == true && menu_count < 255 ) {
+  if(digitalRead(BUTTON_RIT) == 0 && Button_flag == true && menu_count < 255 ) {
       menu_count++;
     if (menu_count == 254) {
       if(setup_flag) {
@@ -324,7 +288,7 @@ void Read_Value_EEPROM() {
 */
       EEPROM.get(0, IF);     //Первая ПЧ
       if (IF > 4000000000){
-        IF = 0;
+        IF = 1070000000ULL;
         EEPROM.put(0, IF);
       }
       EEPROM.get(4, XTAL);   //XTAL = 27
@@ -343,37 +307,37 @@ void Read_Value_EEPROM() {
         EEPROM.put(12, Fmax);
       }
       EEPROM.get(16, Fcorr); //Fcorr = 0;
-      if (Fcorr > 50000000){
-          Fcorr = 50000000;
+      if (Fcorr > 2000000){
+          Fcorr = 0;
           EEPROM.put(16, Fcorr);          
       }
-      if (Fcorr < -50000000){
-          Fcorr = -50000000;
+      if (Fcorr < -2000000){
+          Fcorr = 0;
           EEPROM.put(16, Fcorr);
       }
       EEPROM.get(20, Ftx);   //Ftx  = 311000000;
       if (Ftx > 4000000000){
-        Ftx = 300000000;
+        Ftx = 310000000;
         EEPROM.put(20, Ftx);
       }
       EEPROM.get(24, Ftone); //Ftone  = 1000;
-      if (Ftone > 60000){
+      if (Ftone > 60000U){
         Ftone = 1000;
         EEPROM.put(24, Ftone);
       }
       EEPROM.get(26, SI5351_DRIVE_CLK0); // Driver current
       if (SI5351_DRIVE_CLK0 > 8){
-        SI5351_DRIVE_CLK0 = 2;
+        SI5351_DRIVE_CLK0 = 4;
         EEPROM.put(26, SI5351_DRIVE_CLK0);
       }
       EEPROM.get(27, SI5351_DRIVE_CLK1); // Driver current
       if (SI5351_DRIVE_CLK1 > 8){
-        SI5351_DRIVE_CLK1 = 2;
+        SI5351_DRIVE_CLK1 = 4;
         EEPROM.put(27, SI5351_DRIVE_CLK1);
       }
       EEPROM.get(28, SI5351_DRIVE_CLK2); // Driver current
       if (SI5351_DRIVE_CLK2 > 8){
-        SI5351_DRIVE_CLK2 = 2;
+        SI5351_DRIVE_CLK2 = 4;
         EEPROM.put(28, SI5351_DRIVE_CLK2);
       }
       EEPROM.get(29, ENC_SPIN); // Driver current
@@ -388,13 +352,13 @@ void Read_Value_EEPROM() {
       }
       EEPROM.get(34, xF); //xF  = 1; multiplier F
       if (xF > 2){
-        xF = 1;
+        xF = 2;
         EEPROM.put(34, xF);
       }
 
       EEPROM.get(35, IF_WIDTH_FLAG); // Ширина ПЧ
       if (IF_WIDTH_FLAG > 1 || IF_WIDTH_FLAG < 0) {
-        IF_WIDTH_FLAG = 1;
+        IF_WIDTH_FLAG = 0;
         EEPROM.put(35, IF_WIDTH_FLAG);
       }
 
