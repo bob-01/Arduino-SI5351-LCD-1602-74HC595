@@ -15,6 +15,7 @@
 #define IF_WIDTH_PIN   13
 
 #define Smeter         A0
+#define BUTTON_TONE    A1
 
 Si5351 si5351;
 
@@ -25,10 +26,11 @@ unsigned long currentTime,loopTime;
 unsigned long IF, IF2, Fmin, Fmax, Ftx, Frit, STEP;
 long Fcorr;
 
-boolean enc_block=false, enc_flag=false, rit_flag=false, Button_flag=false, tx_flag=false, vcxo_flag=false, step_flag=false, rewrite_flag=false, setup_flag=false, ftone_flag=false;
+boolean enc_block=false, enc_flag=false, rit_flag=false, Button_flag=false, tx_flag=false, vcxo_flag=false, step_flag=false, rewrite_flag=false, setup_flag=false;
 uint8_t IF_WIDTH_FLAG = false;
 
 uint8_t XTAL, count_avr=0, smeter_count=0, Enc_state, Enc_last, step_count=3, menu_count=0, setup_count=8, xF=1, SI5351_DRIVE_CLK0, SI5351_DRIVE_CLK1, SI5351_DRIVE_CLK2;
+uint8_t ftone_flag=false;
 int8_t enc_move=0, mode=1;
 int8_t ENC_SPIN = 1;
 
@@ -45,6 +47,7 @@ void setup() {
   pinMode(TX_OUT, OUTPUT);
   pinMode(tone_pin, OUTPUT); //объявляем пин как выход для звука
   pinMode(IF_WIDTH_PIN, OUTPUT); //объявляем пин как выход для изменения ширины ПЧ
+  pinMode(BUTTON_TONE, INPUT_PULLUP);
 
   digitalWrite(pin_A, HIGH);
   digitalWrite(pin_B, HIGH); 
@@ -100,7 +103,7 @@ void loop() {
     loopTime = currentTime; // Счетчик прошедшего времени      
   }
 
-    if ( (smeter_count % 70 == 0) and !setup_flag) {
+    if ( (smeter_count % 100 == 0) and !setup_flag) {
         count_avr++;
 
         if (!tx_flag) {
@@ -108,16 +111,15 @@ void loop() {
         }
 
         if (count_avr >= 10) {
-
           smeter_count = 0;
           count_avr = 0;
 
-                if (!tx_flag) {
-                  uSMETER = uSMETER/10;
-                  lcd.setCursor(0,1);
-                  lcd.print(uSMETER); 
-                  lcd.print("   ");
-                }
+          if (!tx_flag) {
+            uSMETER = uSMETER/10;
+            lcd.setCursor(0,1);
+            lcd.print(uSMETER); 
+            lcd.print("   ");
+          }
         }//End  if (count_avr > 3) 
     }//End s_meter
     
@@ -153,6 +155,19 @@ void loop() {
 }//End loop
 
 void CHECK_BUTTON_PRESS() {
+  if(digitalRead(BUTTON_TONE) == 0) {
+    if(!ftone_flag) {
+      ftone_flag = true;
+      tone(tone_pin, Ftone);
+    }
+  }
+  else {
+    if(ftone_flag) {
+      ftone_flag = false;
+      noTone(tone_pin);
+    }
+  }
+
   // Проверка кнопок
   if (Button_flag == 0) {
       if (digitalRead(BUTTON_TX) == 0) {
@@ -217,7 +232,13 @@ void CHECK_BUTTON_PRESS() {
       if (Frit > Fmax){ Frit = Fmax; }
     }
 
-    si5351.set_freq(Frit+IF, SI5351_CLK0 );
+    if (tx_flag == true) {
+      si5351.set_freq(Ftx*xF, SI5351_CLK1 );
+      si5351.set_freq(Frit+IF, SI5351_CLK0 );
+    } else {
+      si5351.set_freq(Frit+IF, SI5351_CLK0 );
+    }
+
     enc_flag = false;
     F_print();
   }
@@ -402,8 +423,8 @@ void F_if2() {
 
 void F_rit() {
   if (rit_flag == true) {
-        lcd.setCursor(10,0);
-        lcd.print("RIT");
+    lcd.setCursor(10,0);
+    lcd.print("RIT");
   } else {
     Frit = Ftx;
     si5351.set_freq(Frit+IF, SI5351_CLK0 );
@@ -440,7 +461,7 @@ void F_setup() {
             case 5: Fcorr+=(STEP/10)*enc_move; if(Fcorr > 10000000) Fcorr=10000000; if(Fcorr < -10000000) Fcorr=-10000000;  break;
             case 6: Ftx+=(STEP*100)*enc_move; if(Ftx > Fmax) Ftx=Fmax; if(Ftx < Fmin) Ftx=Fmin; break;
             case 7: Ftone+=(STEP/10)*enc_move; break;
-            case 8: if(enc_move == 1){ ftone_flag = true; tone(tone_pin,Ftone); } if(enc_move == -1){ ftone_flag = false; noTone(tone_pin); }; break;
+            case 8: if(enc_move == 1){ ftone_flag = true; tone(tone_pin, Ftone); } if(enc_move == -1){ ftone_flag = false; noTone(tone_pin); }; break;
             case 9: if(enc_move == 1) { F_eeprom_w(); lcd.setCursor(0,1); lcd.print("    Complite!!! "); delay (1000); }; break; // EEPROM write
             case 10: if(enc_move == 1) softReset(); break; // soft reboot
             case 11: if(enc_move == 1) xF = 2; if(enc_move == -1) xF = 1; break; // xF
