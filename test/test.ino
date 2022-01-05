@@ -114,32 +114,29 @@ void loop() {
     }//End s_meter
     
     if (step_flag) {
-      if(enc_flag || rewrite_flag) {
-        lcd.setCursor(10,1);
-        step_count = step_count+enc_move;
-        if (step_count > 6) { step_count = 6;};
-        if (step_count == 0) { step_count = 1;};
+        if(enc_flag)
+        {
+          enc_flag = false;
+          step_count = step_count + enc_move;
+          if (step_count > 6) { step_count = 6;};
+          if (step_count == 0) { step_count = 1;};
+        }
 
+        lcd.setCursor(10,1);
         switch (step_count) {
-          case  1: STEP=10;       lcd.print("  10"); break;   //10Hz
-          case  2: STEP=100;      lcd.print(" 100"); break;   //100Hz
-          case  3: STEP=1000;     lcd.print("  1k"); break;   //1kHz
-          case  4: STEP=5000;     lcd.print("  5k"); break;
-          case  5: STEP=10000;    lcd.print(" 10k"); break;   //10kHz
-          case  6: STEP=100000;   lcd.print("100k"); break;   //100kHz
+          case  1: STEP = 10;       lcd.print("  10"); break;   //10Hz
+          case  2: STEP = 100;      lcd.print(" 100"); break;   //100Hz
+          case  3: STEP = 1000;     lcd.print("  1k"); break;   //1kHz
+          case  4: STEP = 5000;     lcd.print("  5k"); break;
+          case  5: STEP = 10000;    lcd.print(" 10k"); break;   //10kHz
+          case  6: STEP = 100000;   lcd.print("100k"); break;   //100kHz
         }
 
         lcd.print("Hz");
-
-        if (rewrite_flag){
-            step_flag = false;
-            rewrite_flag = false;
-        }
-        enc_flag = false;
-      }
+      return;
     }//End Step flag
 
-    if (setup_flag) {
+    if(setup_flag) {
         F_setup();
     }
 }//End loop
@@ -172,9 +169,10 @@ void CHECK_BUTTON_PRESS() {
 
       if (digitalRead(BUTTON_STEP) == 0) {
         Button_flag = true;
+        
+        if(!setup_flag) enc_block = !enc_block;
+
         step_flag = !step_flag;
-        enc_block = !enc_block;
-        if(setup_flag){enc_block = true;}
       }//End BUTTON_STEP
 
       if (digitalRead(BUTTON_VCXO) == 0) {
@@ -205,8 +203,7 @@ void CHECK_BUTTON_PRESS() {
         enc_block = false;
         F_print();
         step_flag = 1;
-        rewrite_flag = 1;
-        setup_flag=false; 
+        setup_flag = false; 
       } else {
         enc_flag = true;
         F_setup();
@@ -381,10 +378,8 @@ void F_tx() {
   else {
     digitalWrite(TX_OUT, LOW);
     lcd.setCursor(0,1);
-    lcd.print("                ");
+    lcd.print("   ");
     si5351.output_enable(SI5351_CLK1, 0);
-    step_flag = 1;
-    rewrite_flag = 1; 
   }
 }//End F tx
 

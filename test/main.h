@@ -36,7 +36,7 @@ unsigned long currentTime,loopTime;
 unsigned long IF, IF2, Fmin, Fmax, Ftx, Frit, STEP;
 long Fcorr;
 
-boolean resetFlag, enc_block=false, enc_flag=false, rit_flag=false, Button_flag=false, tx_flag=false, vcxo_flag=false, step_flag=false, rewrite_flag=false, setup_flag=false;
+boolean resetFlag, enc_block=false, enc_flag=false, rit_flag=false, Button_flag=false, tx_flag=false, vcxo_flag=false, step_flag=false, setup_flag=false;
 uint8_t IF_WIDTH_FLAG = false;
 
 uint8_t XTAL, count_avr=0, smeter_count=0, Enc_state, Enc_last, step_count=3, menu_count=0, setup_count=8, xF=1, SI5351_DRIVE_CLK0, SI5351_DRIVE_CLK1, SI5351_DRIVE_CLK2;
