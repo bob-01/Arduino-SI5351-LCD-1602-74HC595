@@ -179,9 +179,9 @@ int main(void)
   si5351_drive_strength(SI5351_CLK1, SI5351_DRIVE_8MA);
   si5351_drive_strength(SI5351_CLK2, SI5351_DRIVE_8MA);
   
-  si5351_set_freq(10220000000, SI5351_CLK0);
-  si5351_set_freq(10220000000, SI5351_CLK1);
-  si5351_set_freq(10220000000, SI5351_CLK2);
+  si5351_set_freq(100 * 1e6 * 100ULL, SI5351_CLK0);
+  si5351_set_freq(101 * 1e6 * 100ULL, SI5351_CLK1);
+  si5351_set_freq(102 * 1e6 * 100ULL, SI5351_CLK2);
 
   /* USER CODE END 2 */
 
