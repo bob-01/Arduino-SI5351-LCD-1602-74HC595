@@ -23,6 +23,7 @@
 /* USER CODE BEGIN Includes */
 #include "LCD.h"
 #include "encoder.h"
+#include "si5351.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -86,7 +87,7 @@ typedef enum
   _NULL_PARAM, VOLUME, MODE, FILTER, BAND, STEP, VFOSEL, RIT, AGC, NR,
   ATT, ATT2, SMETER, SWRMETER, CWDEC, CWTONE, CWOFF, SEMIQSK, KEY_WPM, KEY_MODE,
   KEY_PIN, KEY_TX, VOX, VOXGAIN, DRIVE, TXDELAY, MOX, CWINTERVAL,
-  CWMSG1, CWMSG2, CWMSG3, CWMSG4, CWMSG5, CWMSG6, PWM_MIN, PWM_MAX, SIFXTAL, SR,
+  CWMSG1, CWMSG2, CWMSG3, CWMSG4, CWMSG5, CWMSG6, PWM_MIN, PWM_MAX, SI5351_FXTAL, SR,
   CPULOAD, PARAM_A, PARAM_B, PARAM_C, VERS,
   ALL = 0xff
 } eParams_t;
@@ -116,6 +117,7 @@ const char* filt_label[N_FILT + 1] = { "Full", "3000", "2400", "1800", "500", "2
 static uint8_t pwm_min = 0;    // PWM value for which PA reaches its minimum: 29 when C31 installed;   0 when C31 removed;   0 for biasing BS170 directly
 static uint8_t pwm_max = 128;  // PWM value for which PA reaches its maximum:                                              128 for biasing BS170 directly
 
+uint32_t si5351_XTAL = SI5351_XTAL_FREQ;
 /* USER CODE BEGIN PV */
 
 /* USER CODE END PV */
@@ -171,6 +173,16 @@ int main(void)
   lcd.init();
   show_banner();
   lcd.setCursor(7, 0); lcd.print(" R"); lcd.print(VERSION); lcd.blanks();
+
+  si5351_init(&hi2c1, SI5351_BUS_BASE_ADDR, SI5351_CRYSTAL_LOAD_10PF, si5351_XTAL, 0);
+  si5351_drive_strength(SI5351_CLK0, SI5351_DRIVE_8MA);
+  si5351_drive_strength(SI5351_CLK1, SI5351_DRIVE_8MA);
+  si5351_drive_strength(SI5351_CLK2, SI5351_DRIVE_8MA);
+  
+  si5351_set_freq(10220000000, SI5351_CLK0);
+  si5351_set_freq(10220000000, SI5351_CLK1);
+  si5351_set_freq(10220000000, SI5351_CLK2);
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -543,24 +555,24 @@ int8_t paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
   if(id == ALL) for(id = 1; id != N_ALL_PARAMS+1; id++) paramAction(action, id);  // for all parameters
 
   switch(id) {    // Visible parameters
-    case VOLUME:  paramAction(action, volume, 0x11, "Volume", NULL, -1, 16, false); break;
-    case MODE:    paramAction(action, mode, 0x12, "Mode", mode_label, 0, _N(mode_label) - 1, false); break;
-    case FILTER:  paramAction(action, filt, 0x13, "Filter BW", filt_label, 0, _N(filt_label) - 1, false); break;
-    case BAND:    paramAction(action, bandval, 0x14, "Band", band_label, 0, _N(band_label) - 1, false); break;
-    case STEP:    paramAction(action, stepsize, 0x15, "Tune Rate", stepsize_label, 0, _N(stepsize_label) - 1, false); break;
-    case AGC:     paramAction(action, eeprom_version, 0x18, "AGC", offon_label, 0, 1, false); break;
-    case NR:      paramAction(action, eeprom_version, 0x19, "NR", NULL, 0, 8, false); break;
-    case ATT:     paramAction(action, eeprom_version, 0x1A, "ATT", att_label, 0, 7, false); break;
-    case ATT2:    paramAction(action, eeprom_version, 0x1B, "ATT2", NULL, 0, 16, false); break;
-    case SMETER:  paramAction(action, eeprom_version, 0x1C, "S-meter", smode_label, 0, _N(smode_label) - 1, false); break;
-    case SWRMETER:paramAction(action, eeprom_version, 0x1D, "SWR Meter", swr_label, 0, _N(swr_label) - 1, false); break;
-    case CWDEC:   paramAction(action, eeprom_version, 0x21, "CW Decoder", offon_label, 0, 1, false); break;
-    case KEY_TX:  paramAction(action, eeprom_version, 0x28, "Practice", offon_label, 0, 1, false); break;
-    case DRIVE:   paramAction(action, eeprom_version, 0x33, "TX Drive", NULL, 0, 8, false); break;
-    case MOX:     paramAction(action, eeprom_version, 0x35, "MOX", NULL, 0, 2, false); break;
-    case PWM_MIN: paramAction(action, pwm_min, 0x81, "PA Bias min", NULL, 0, pwm_max - 1, false); break;
-    case PWM_MAX: paramAction(action, pwm_max, 0x82, "PA Bias max", NULL, pwm_min, 255, false); break;
-    case SIFXTAL: paramAction(action, eeprom_version, 0x83, "Ref freq", NULL, 14000000, 28000000, false); break;
+    case VOLUME:    paramAction(action, volume, 0x11, "Volume", NULL, -1, 16, false); break;
+    case MODE:      paramAction(action, mode, 0x12, "Mode", mode_label, 0, _N(mode_label) - 1, false); break;
+    case FILTER:    paramAction(action, filt, 0x13, "Filter BW", filt_label, 0, _N(filt_label) - 1, false); break;
+    case BAND:      paramAction(action, bandval, 0x14, "Band", band_label, 0, _N(band_label) - 1, false); break;
+    case STEP:      paramAction(action, stepsize, 0x15, "Tune Rate", stepsize_label, 0, _N(stepsize_label) - 1, false); break;
+    case AGC:       paramAction(action, eeprom_version, 0x18, "AGC", offon_label, 0, 1, false); break;
+    case NR:        paramAction(action, eeprom_version, 0x19, "NR", NULL, 0, 8, false); break;
+    case ATT:       paramAction(action, eeprom_version, 0x1A, "ATT", att_label, 0, 7, false); break;
+    case ATT2:      paramAction(action, eeprom_version, 0x1B, "ATT2", NULL, 0, 16, false); break;
+    case SMETER:    paramAction(action, eeprom_version, 0x1C, "S-meter", smode_label, 0, _N(smode_label) - 1, false); break;
+    case SWRMETER:  paramAction(action, eeprom_version, 0x1D, "SWR Meter", swr_label, 0, _N(swr_label) - 1, false); break;
+    case CWDEC:     paramAction(action, eeprom_version, 0x21, "CW Decoder", offon_label, 0, 1, false); break;
+    case KEY_TX:    paramAction(action, eeprom_version, 0x28, "Practice", offon_label, 0, 1, false); break;
+    case DRIVE:     paramAction(action, eeprom_version, 0x33, "TX Drive", NULL, 0, 8, false); break;
+    case MOX:       paramAction(action, eeprom_version, 0x35, "MOX", NULL, 0, 2, false); break;
+    case PWM_MIN:   paramAction(action, pwm_min, 0x81, "PA Bias min", NULL, 0, pwm_max - 1, false); break;
+    case PWM_MAX:   paramAction(action, pwm_max, 0x82, "PA Bias max", NULL, pwm_min, 255, false); break;
+    case SI5351_FXTAL: paramAction(action, si5351_XTAL, 0x83, "Ref freq", NULL, 14000000, 28000000, false); break;
 
     // Invisible parameters
     case VERS:    paramAction(action, eeprom_version, 0, NULL, NULL, 0, 0, false); break;
