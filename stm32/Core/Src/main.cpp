@@ -32,6 +32,7 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+#define BUTTONS (~GPIOA->IDR & ENC_BUTTON_Pin)
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -46,7 +47,7 @@ LCD lcd;
 volatile bool change = true;
 extern int8_t encoder_val;
 
-uint32_t freq = 3100000ULL;
+int32_t freq = 3100000;
 
 // 0=not in menu, 1=selects menu item, 2=selects parameter value
 volatile uint8_t menumode = 0;
@@ -55,6 +56,21 @@ enum step_t { STEP_10M, STEP_1M, STEP_500k, STEP_100k, STEP_10k, STEP_1k, STEP_5
 uint32_t stepsizes[10] = { 10000000, 1000000, 500000, 100000, 10000, 1000, 500, 100, 10, 1 };
 volatile uint8_t stepsize = STEP_1k;
 uint8_t prev_stepsize[] = { STEP_1k, STEP_500 }; //default stepsize for resp. SSB, CW
+
+volatile uint8_t event;
+typedef enum {
+   BUTTON_TX = 0x10, BUTTON_IF = 0x20, BUTTON_ENCODER = 0x30, BUTTON_RIT = 0x40
+} event_t;
+
+typedef enum
+{
+    NO_PRESS,
+    SINGLE_PRESS = 0x01,
+    LONG_PRESS = 0x02,
+    DOUBLE_PRESS = 0x03,
+    PRESS_TURN = 0x04,
+    PLC = 0x05
+} eButtonEvent;
 /* USER CODE BEGIN PV */
 
 /* USER CODE END PV */
@@ -66,8 +82,9 @@ static void MX_I2C1_Init(void);
 /* USER CODE BEGIN PFP */
 void stepsize_showcursor();
 void process_encoder_tuning_step(int8_t steps);
-void display_vfo(uint32_t);
+void display_vfo(uint32_t freq);
 void show_banner();
+void stepsize_change(int8_t val);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -107,8 +124,6 @@ int main(void)
   lcd.init();
   show_banner();
   lcd.setCursor(7, 0); lcd.print(" R"); lcd.print(VERSION); lcd.blanks();
-
-  uint32_t t0 = HAL_GetTick();
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -118,6 +133,63 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+    if (BUTTONS) {
+      if(!((event & LONG_PRESS) || (event & PLC))) {  // hack: if there was long-push before, then fast forward
+        event = SINGLE_PRESS;
+
+        uint32_t t0 = HAL_GetTick();
+        
+        for(; BUTTONS;) { // until released or long-press
+          if((HAL_GetTick() - t0) > 300) { event = LONG_PRESS; break; }
+        }
+
+        //debounce
+        HAL_Delay(10);
+        // until 2nd press or timeout
+        for(; (event != LONG_PRESS) && ((HAL_GetTick() - t0) < 500);) {
+          if(BUTTONS) { event = DOUBLE_PRESS; break; }
+        }
+
+        // until released, or encoder is turned while longpress
+        for(; BUTTONS;) {
+          if(encoder_val && event == LONG_PRESS) { event = PRESS_TURN; break; }
+        }
+
+        event |= BUTTON_ENCODER;
+      } else {
+        event = (event & 0xf0) | ((encoder_val) ? PRESS_TURN : PLC);
+      }
+
+      switch(event) {
+        case BUTTON_ENCODER|SINGLE_PRESS:
+          if (!menumode) {
+            stepsize_change(+1);
+          } else {
+            int8_t _menumode;
+  //          if(menumode == 1){ _menumode = 2; }  // short encoder-click while in menu: enter value selection screen
+  //          if(menumode == 2){ _menumode = 1; change = true; paramAction(SAVE, menu); } // short encoder-click while in value selection screen: save, and return to menu screen
+            menumode = _menumode;
+          }
+          break;
+        case BUTTON_ENCODER|DOUBLE_PRESS:
+          break;
+        case BUTTON_ENCODER|LONG_PRESS: stepsize_change(-1); break;
+        case BUTTON_ENCODER|PRESS_TURN:
+  /*
+            for(; _digitalRead(BUTTONS);){ // process encoder changes until released
+            if(encoder_val){
+              paramAction(UPDATE, VOLUME);
+              if(volume < 0){ volume = 10; paramAction(SAVE, VOLUME); powerDown(); }  // powerDown when volume < 0
+              paramAction(SAVE, VOLUME);
+            }
+          }
+          change = true; // refresh display
+  */
+          break;
+        }
+    } else event = 0;  // no button pressed: reset event
+
+
     if(menumode == 0) {
       if(encoder_val) {  // process encoder tuning steps
         process_encoder_tuning_step(encoder_val);
@@ -275,7 +347,7 @@ void process_encoder_tuning_step(int8_t steps)
 {
   int32_t stepval = stepsizes[stepsize];
   freq += steps * stepval;
-  freq = max(1, min(999999999, freq));
+  freq = max(10000, min(999999999, freq));
   change = true;
 }
 
@@ -304,16 +376,16 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
   }
 }
 
-void display_vfo(uint32_t f) {
+void display_vfo(uint32_t freq) {
   lcd.noCursor();
   lcd.setCursor(0, 1);
 
   uint32_t scale=10e7;
-  if(f/scale == 0) { lcd.print(' '); scale/=10; }
-  if(f/scale == 0) { lcd.print(' '); scale/=10; }
+  if(freq/scale == 0) { lcd.print(' '); scale/=10; }
+  if(freq/scale == 0) { lcd.print(' '); scale/=10; }
 
-  for(; scale!=1; f%=scale, scale/=10) {
-    lcd.print((int8_t) abs(f/scale));
+  for(; scale!=1; freq%=scale, scale/=10) {
+    lcd.print((int8_t) abs(freq/scale));
     if(scale == (int32_t)1e3 || scale == (int32_t)1e6) lcd.print('.');
   }
 }
