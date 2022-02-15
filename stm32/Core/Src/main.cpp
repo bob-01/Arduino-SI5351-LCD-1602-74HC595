@@ -53,10 +53,10 @@ int32_t freq = 3100000;
 // 0=not in menu, 1=selects menu item, 2=selects parameter value
 volatile uint8_t menumode = 0;
 
-uint8_t prev_bandval = 2;
-uint8_t bandval = 2;
-#define N_BANDS 11
-const char* band_label[N_BANDS] = { "160m", "80m", "60m", "40m", "30m", "20m", "17m", "15m", "12m", "10m", "6m" };
+uint8_t prev_bandval = 1;
+uint8_t bandval = 1;
+#define N_BANDS 12
+const char* band_label[N_BANDS] = { "160m", "100m", "80m", "60m", "40m", "30m", "20m", "17m", "15m", "12m", "10m", "6m" };
 
 const char* stepsize_label[] = { "10M", "1M", "0.5M", "100k", "10k", "1k", "0.5k", "100", "10", "1" };
 enum step_t { STEP_10M, STEP_1M, STEP_500k, STEP_100k, STEP_10k, STEP_1k, STEP_500, STEP_100, STEP_10, STEP_1 };
@@ -117,7 +117,7 @@ const char* filt_label[N_FILT + 1] = { "Full", "3000", "2400", "1800", "500", "2
 static uint8_t pwm_min = 0;    // PWM value for which PA reaches its minimum: 29 when C31 installed;   0 when C31 removed;   0 for biasing BS170 directly
 static uint8_t pwm_max = 128;  // PWM value for which PA reaches its maximum:                                              128 for biasing BS170 directly
 
-uint32_t si5351_XTAL = SI5351_XTAL_FREQ;
+unsigned long si5351_XTAL = SI5351_XTAL_FREQ;
 /* USER CODE BEGIN PV */
 
 /* USER CODE END PV */
@@ -132,7 +132,7 @@ void process_encoder_tuning_step(int8_t steps);
 void display_vfo(int32_t freq);
 void show_banner();
 void stepsize_change(int8_t val);
-template <typename T> void paramAction(uint8_t action, volatile T& value, uint8_t menuid, const char *label, const char* enumArray[], int32_t _min, int32_t _max, bool continuous);
+template <typename T> void paramAction(uint8_t action, T& value, uint8_t menuid, const char *label, const char* enumArray[], int32_t _min, int32_t _max, bool continuous);
 int8_t paramAction(uint8_t action, uint8_t id);
 /* USER CODE END PFP */
 
@@ -238,16 +238,14 @@ int main(void)
           break;
         case BUTTON_ENCODER|LONG_PRESS: if(!menumode) { stepsize_change(-1); break; }
         case BUTTON_ENCODER|PRESS_TURN:
-  /*
-            for(; _digitalRead(BUTTONS);){ // process encoder changes until released
-            if(encoder_val){
+            for(; BUTTONS;) {
+            if(encoder_val) {
               paramAction(UPDATE, VOLUME);
-              if(volume < 0){ volume = 10; paramAction(SAVE, VOLUME); powerDown(); }  // powerDown when volume < 0
+              if(volume < 0) { volume = 10; paramAction(SAVE, VOLUME); }
               paramAction(SAVE, VOLUME);
             }
           }
           change = true; // refresh display
-  */
           break;
         }
     } else event = 0;  // no button pressed: reset event
@@ -466,10 +464,13 @@ void display_vfo(int32_t freq) {
   if(freq/scale == 0) { lcd.print(' '); scale/=10; }
   if(freq/scale == 0) { lcd.print(' '); scale/=10; }
 
-  for(; scale!=1; freq%=scale, scale/=10) {
-    lcd.print((int8_t) abs(freq/scale));
+  for(; scale!=1; freq %= scale, scale /= 10) {
+    lcd.print(char('0' + freq/scale));
     if(scale == (int32_t)1e3 || scale == (int32_t)1e6) lcd.print('.');
   }
+  
+  lcd.print(' '); lcd.print(mode_label[mode]); lcd.print(' ');
+  lcd.setCursor(15, 1); lcd.print('R');
 }
 
 // output menuid in x.y format
@@ -519,7 +520,7 @@ void actionCommon(uint8_t action, uint8_t *ptr, uint8_t size){
   eeprom_addr += size;
 }
 
-template<typename T> void paramAction(uint8_t action, volatile T& value, uint8_t menuid, const char *label, const char* enumArray[], int32_t _min, int32_t _max, bool continuous) {
+template<typename T> void paramAction(uint8_t action, T& value, uint8_t menuid, const char *label, const char* enumArray[], int32_t _min, int32_t _max, bool continuous) {
   switch(action) {
     case UPDATE:
     case UPDATE_MENU:
@@ -533,7 +534,7 @@ template<typename T> void paramAction(uint8_t action, volatile T& value, uint8_t
       printlabel(action, menuid, label);  // print normal/menu label
       if(enumArray == NULL) {  // print value
         if((_min < 0) && (value >= 0)) lcd.print('+');  // add + sign for positive values, in case negative values are supported
-  //      lcd.print(value);
+        lcd.print(value);
       } else {
         lcd.print(enumArray[value]);
       }

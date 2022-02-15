@@ -15,11 +15,6 @@ void LCD::init()
   LCD::command(0x02);
 };
 
-void LCD::command (uint8_t value) {
-  send(value, 0x00);
-  HAL_Delay(1);
-}
-
 // mode: 0 - command, 1 - data
 void LCD::send (uint8_t value, uint8_t mode)
 {
@@ -36,6 +31,11 @@ void LCD::send (uint8_t value, uint8_t mode)
 
   LCD_DATA_PIN_SET((GPIO_PinState) mode);
   STRUB_EN_PIN;
+}
+
+void LCD::command (uint8_t value) {
+  send(value, 0x00);
+  HAL_Delay(1);
 }
 
 void LCD::setCursor(uint8_t col, uint8_t row) {
@@ -61,7 +61,7 @@ void LCD::write(uint8_t value) {
 }
 
 void LCD::print(const char *str) {
-  uint8_t i=0;
+  uint8_t i = 0;
   while(str[i] != 0)
   {
     write(str[i]);
@@ -69,21 +69,56 @@ void LCD::print(const char *str) {
   }
 }
 
-void LCD::print (const char str) {
-  write(str);
+void LCD::print (char c) {
+  write(c);
 }
 
-void LCD::print (int8_t dec) {
-  write(dec + '0');
+void LCD::print(int n) {
+  print((long) n, DEC);
 }
 
-void LCD::print(const __FlashStringHelper *ifsh) {
-  PGM_P p = reinterpret_cast<PGM_P>(ifsh);
-  while (1) {
-    unsigned char c = pgm_read_byte(p++);
-    if (c == 0) break;
-    write(c);
+void LCD::print(unsigned char b, int base = DEC) {
+  print((unsigned long) b);
+}
+
+void LCD::print(long n, int base = DEC) {
+  if (base == 0) {
+    write(n);
+  } else {
+    if (base == 10) {
+      if (n < 0) {
+        print('-');
+        n = -n;
+        printNumber(n, 10);
+      } else printNumber(n, 10);
+    } else {
+        printNumber(n, base);
+    }
   }
+}
+
+void LCD::print(unsigned long n) {
+  printNumber(n, DEC);
+}
+
+void LCD::printNumber(unsigned long n, int base)
+{
+  char buf[8 * sizeof(long) + 1]; // Assumes 8-bit chars plus zero byte.
+  char *str = &buf[sizeof(buf) - 1];
+
+  *str = '\0';
+
+  // prevent crash if called with base == 1
+  if (base < 2) base = 10;
+
+  do {
+    char c = n % base;
+    n /= base;
+
+    *--str = c < 10 ? c + '0' : c + 'A' - 10;
+  } while(n);
+
+  print(str);
 }
 
 void LCD::blanks () {

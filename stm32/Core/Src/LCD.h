@@ -8,9 +8,9 @@
 #include <stdint.h>
 #include "stm32f0xx_hal.h"
 
-#ifndef PGM_P
-#define PGM_P const char *
-#endif
+#define DEC 10
+#define HEX 16
+#define OCT 8
 
 #define pgm_read_byte(addr) (*(const int32_t *)(addr))
 
@@ -27,20 +27,18 @@
 #define STRUB_EN_PIN LCD_EN_PIN_SET(GPIO_PIN_SET); LCD_EN_PIN_SET(GPIO_PIN_RESET);
 #define STRUB_CLK_PIN LCD_CLK_PIN_SET(GPIO_PIN_SET); LCD_CLK_PIN_SET(GPIO_PIN_RESET);
 
-//#define PSTR(str) (str)
-
-class __FlashStringHelper;
-//#define F(string_literal) (reinterpret_cast<const __FlashStringHelper *>(PSTR(string_literal)))
-
 class LCD
 {
   public:
     void init();
     void createChar(uint8_t location, uint8_t charmap[]);
     void print(const char *str);
-    void print(const char str);
-    void print (int8_t dec);
-    void print(const __FlashStringHelper *ifsh);
+    void print(char);
+    void print(unsigned char, int);
+    void print(int);
+    void print(long, int);
+    void print(unsigned long);
+    void printNumber(unsigned long, int);
     void cursor();
     void noCursor();
     void setCursor(uint8_t col, uint8_t row);
@@ -51,7 +49,7 @@ class LCD
     void command (uint8_t value);
     void write (uint8_t value);
 
-  uint8_t _displaycontrol = 0x0C;
+    uint8_t _displaycontrol = 0x0C;
 };
 
 #endif
