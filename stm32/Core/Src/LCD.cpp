@@ -93,3 +93,9 @@ void LCD::cursor() {
   _displaycontrol |= LCD_CURSORON;
   command(LCD_DISPLAYCONTROL | _displaycontrol);
 }
+
+// Turns the underline cursor on/off
+void LCD::noCursor() {
+  _displaycontrol &= ~LCD_CURSORON;
+  command(LCD_DISPLAYCONTROL | _displaycontrol);
+}

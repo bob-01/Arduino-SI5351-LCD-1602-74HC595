@@ -31,11 +31,6 @@ extern "C" {
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#define VERSION   "1.01a"
-
-#define min(a,b) ((a)<(b)?(a):(b))
-#define max(a,b) ((a)>(b)?(a):(b))
-#define abs(x) ((x)>0?(x):-(x))
 /* USER CODE END Includes */
 
 /* Exported types ------------------------------------------------------------*/
@@ -76,7 +71,11 @@ void Error_Handler(void);
 #define LCD_EN_Pin GPIO_PIN_5
 #define LCD_EN_GPIO_Port GPIOB
 /* USER CODE BEGIN Private defines */
+#define VERSION   "1.01a"
 
+#define min(a,b) ((a)<(b)?(a):(b))
+#define max(a,b) ((a)>(b)?(a):(b))
+#define abs(x) ((x)>0?(x):-(x))
 /* USER CODE END Private defines */
 
 #ifdef __cplusplus

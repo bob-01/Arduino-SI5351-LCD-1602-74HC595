@@ -44,6 +44,8 @@ I2C_HandleTypeDef hi2c1;
 LCD lcd;
 
 volatile bool change = true;
+extern int8_t encoder_val;
+
 uint32_t freq = 3100000ULL;
 
 // 0=not in menu, 1=selects menu item, 2=selects parameter value
@@ -64,7 +66,7 @@ static void MX_I2C1_Init(void);
 /* USER CODE BEGIN PFP */
 void stepsize_showcursor();
 void process_encoder_tuning_step(int8_t steps);
-void display_vfo(uint32_t f);
+void display_vfo(uint32_t);
 void show_banner();
 /* USER CODE END PFP */
 
@@ -106,7 +108,7 @@ int main(void)
   show_banner();
   lcd.setCursor(7, 0); lcd.print(" R"); lcd.print(VERSION); lcd.blanks();
 
-  display_vfo(freq);
+  uint32_t t0 = HAL_GetTick();
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -125,7 +127,6 @@ int main(void)
 
     if(change) {  // only change if TX is OFF, prevent simultaneous I2C bus access
       change = false;
-  
       if(menumode == 0) {
         display_vfo(freq);
         stepsize_showcursor();
@@ -299,11 +300,12 @@ void show_banner() {
 
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
   if(GPIO_Pin == ENC_A_Pin || GPIO_Pin == ENC_B_Pin) {
-
+    encTick();
   }
 }
 
 void display_vfo(uint32_t f) {
+  lcd.noCursor();
   lcd.setCursor(0, 1);
 
   uint32_t scale=10e7;

@@ -1,3 +1,7 @@
+/*
+  HD44780 + 74HC595
+*/
+
 #ifndef LCD_H
 #define LCD_H
 
@@ -32,17 +36,15 @@ class LCD
     void print (int8_t dec);
     void cursor();
     void noCursor();
-    void string();
     void setCursor(uint8_t col, uint8_t row);
     void clear();
-    void symbol();
     void blanks();
   private:
     void send (uint8_t value, uint8_t mode);
     void command (uint8_t value);
     void write (uint8_t value);
 
-  uint8_t _displaycontrol;
+  uint8_t _displaycontrol = 0x0C;
 };
 
 #endif
