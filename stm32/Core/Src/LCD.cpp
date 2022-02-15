@@ -77,6 +77,15 @@ void LCD::print (int8_t dec) {
   write(dec + '0');
 }
 
+void LCD::print(const __FlashStringHelper *ifsh) {
+  PGM_P p = reinterpret_cast<PGM_P>(ifsh);
+  while (1) {
+    unsigned char c = pgm_read_byte(p++);
+    if (c == 0) break;
+    write(c);
+  }
+}
+
 void LCD::blanks () {
   print("        ");
 }

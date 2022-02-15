@@ -52,10 +52,19 @@ int32_t freq = 3100000;
 // 0=not in menu, 1=selects menu item, 2=selects parameter value
 volatile uint8_t menumode = 0;
 
+uint8_t prev_bandval = 2;
+uint8_t bandval = 2;
+#define N_BANDS 11
+const char* band_label[N_BANDS] = { "160m", "80m", "60m", "40m", "30m", "20m", "17m", "15m", "12m", "10m", "6m" };
+
+const char* stepsize_label[] = { "10M", "1M", "0.5M", "100k", "10k", "1k", "0.5k", "100", "10", "1" };
 enum step_t { STEP_10M, STEP_1M, STEP_500k, STEP_100k, STEP_10k, STEP_1k, STEP_500, STEP_100, STEP_10, STEP_1 };
 uint32_t stepsizes[10] = { 10000000, 1000000, 500000, 100000, 10000, 1000, 500, 100, 10, 1 };
 volatile uint8_t stepsize = STEP_1k;
 uint8_t prev_stepsize[] = { STEP_1k, STEP_500 }; //default stepsize for resp. SSB, CW
+
+volatile uint8_t prev_menumode = 0;
+volatile int8_t menu = 0;  // current parameter id selected in menu
 
 volatile uint8_t event;
 typedef enum {
@@ -71,6 +80,42 @@ typedef enum
     PRESS_TURN = 0x04,
     PLC = 0x05
 } eButtonEvent;
+
+typedef enum
+{
+  _NULL_PARAM, VOLUME, MODE, FILTER, BAND, STEP, VFOSEL, RIT, AGC, NR,
+  ATT, ATT2, SMETER, SWRMETER, CWDEC, CWTONE, CWOFF, SEMIQSK, KEY_WPM, KEY_MODE,
+  KEY_PIN, KEY_TX, VOX, VOXGAIN, DRIVE, TXDELAY, MOX, CWINTERVAL,
+  CWMSG1, CWMSG2, CWMSG3, CWMSG4, CWMSG5, CWMSG6, PWM_MIN, PWM_MAX, SIFXTAL, SR,
+  CPULOAD, PARAM_A, PARAM_B, PARAM_C, VERS,
+  ALL = 0xff
+} eParams_t;
+
+const char* offon_label[2] = {"OFF", "ON"};
+const char* smode_label[] = { "OFF", "dBm", "S", "S-bar", "wpm", "Vss" };
+const char* swr_label[] = { "OFF", "FWD-SWR", "FWD-REF", "VFWD-VREF" };
+const char* att_label[] = { "0dB", "-13dB", "-20dB", "-33dB", "-40dB", "-53dB", "-60dB", "-73dB" };
+
+volatile int8_t volume = 12;
+volatile uint8_t filt = 0;
+
+uint8_t eeprom_version;
+uint32_t eeprom_addr;
+
+// Support functions for parameter and menu handling
+typedef enum { UPDATE, UPDATE_MENU, NEXT_MENU, LOAD, SAVE, SKIP, NEXT_CH } action_t;
+
+const char* mode_label[5] = { "LSB", "USB", "CW ", "FM ", "AM " };
+typedef enum { LSB, USB, CW, FM, AM } eMode_t;
+volatile uint8_t mode = AM;
+
+#define N_FILT 7
+uint8_t prev_filt[] = { 0 , 4 }; // default filter for modes resp. CW, SSB
+const char* filt_label[N_FILT + 1] = { "Full", "3000", "2400", "1800", "500", "200", "100", "50" };
+
+static uint8_t pwm_min = 0;    // PWM value for which PA reaches its minimum: 29 when C31 installed;   0 when C31 removed;   0 for biasing BS170 directly
+static uint8_t pwm_max = 128;  // PWM value for which PA reaches its maximum:                                              128 for biasing BS170 directly
+
 /* USER CODE BEGIN PV */
 
 /* USER CODE END PV */
@@ -82,9 +127,11 @@ static void MX_I2C1_Init(void);
 /* USER CODE BEGIN PFP */
 void stepsize_showcursor();
 void process_encoder_tuning_step(int8_t steps);
-void display_vfo(uint32_t freq);
+void display_vfo(int32_t freq);
 void show_banner();
 void stepsize_change(int8_t val);
+template <typename T> void paramAction(uint8_t action, volatile T& value, uint8_t menuid, const char *label, const char* enumArray[], int32_t _min, int32_t _max, bool continuous);
+int8_t paramAction(uint8_t action, uint8_t id);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -164,16 +211,20 @@ int main(void)
         case BUTTON_ENCODER|SINGLE_PRESS:
           if (!menumode) {
             stepsize_change(+1);
-          } else {
-            int8_t _menumode;
-  //          if(menumode == 1){ _menumode = 2; }  // short encoder-click while in menu: enter value selection screen
-  //          if(menumode == 2){ _menumode = 1; change = true; paramAction(SAVE, menu); } // short encoder-click while in value selection screen: save, and return to menu screen
-            menumode = _menumode;
+            break;
           }
+
+          // short left-click while in menu: enter value selection screen
+          if(menumode == 1) { menumode = 2; break; }
+          if(menumode > 1) { menumode = 1; break; }
           break;
         case BUTTON_ENCODER|DOUBLE_PRESS:
+          // short left-click while in default screen: enter menu mode
+          if(!menumode) { menumode = 1; if(menu == 0) menu = 1; break; }
+          // short left-click while in value selection screen: save, and return to default screen
+          if(menumode) { menumode = 0; paramAction(SAVE, menu); }
           break;
-        case BUTTON_ENCODER|LONG_PRESS: stepsize_change(-1); break;
+        case BUTTON_ENCODER|LONG_PRESS: if(!menumode) { stepsize_change(-1); break; }
         case BUTTON_ENCODER|PRESS_TURN:
   /*
             for(; _digitalRead(BUTTONS);){ // process encoder changes until released
@@ -189,6 +240,25 @@ int main(void)
         }
     } else event = 0;  // no button pressed: reset event
 
+    // Show parameter and value
+    if ((menumode) || (prev_menumode != menumode)) {
+      int8_t encoder_change = encoder_val;
+
+      if((menumode == 1) && encoder_change) {
+        menu += encoder_val;   // Navigate through menu
+        menu = max(1 /* 0 */, min(menu, N_PARAMS));
+        menu = paramAction(NEXT_MENU, menu);  // auto probe next menu item (gaps may exist)
+        encoder_val = 0;
+      }
+
+      if(encoder_change || (prev_menumode != menumode)) paramAction(UPDATE_MENU, (menumode) ? menu : 0);  // update param with encoder change and display
+      prev_menumode = menumode;
+
+      if(menumode == 2) {
+        if(encoder_change) {
+        }
+      }
+    }
 
     if(menumode == 0) {
       if(encoder_val) {  // process encoder tuning steps
@@ -376,11 +446,11 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
   }
 }
 
-void display_vfo(uint32_t freq) {
+void display_vfo(int32_t freq) {
   lcd.noCursor();
   lcd.setCursor(0, 1);
 
-  uint32_t scale=10e7;
+  int32_t scale=10e7;
   if(freq/scale == 0) { lcd.print(' '); scale/=10; }
   if(freq/scale == 0) { lcd.print(' '); scale/=10; }
 
@@ -389,6 +459,121 @@ void display_vfo(uint32_t freq) {
     if(scale == (int32_t)1e3 || scale == (int32_t)1e6) lcd.print('.');
   }
 }
+
+// output menuid in x.y format
+void printmenuid(uint8_t menuid){
+  static const char seperator[] = {'.', ' '};
+  uint8_t ids[] = {(uint8_t)(menuid >> 4), (uint8_t)(menuid & 0xF)};
+  for(int i = 0; i < 2; i++){
+    uint8_t id = ids[i];
+    if(id >= 10){
+      id -= 10;
+      lcd.print('1');
+    }
+    lcd.print(char('0' + id));
+    lcd.print(seperator[i]);
+  }
+}
+
+void printlabel(uint8_t action, uint8_t menuid, const char *label){
+  if(action == UPDATE_MENU) {
+    lcd.setCursor(0, 0);
+    printmenuid(menuid);
+    lcd.print(label); lcd.blanks(); lcd.blanks();
+    lcd.setCursor(0, 1); // value on next line
+    if(menumode >= 2) lcd.print('>');
+  } else { // UPDATE (not in menu)
+    lcd.setCursor(0, 1); lcd.print(label); lcd.print(": ");
+  }
+}
+
+void actionCommon(uint8_t action, uint8_t *ptr, uint8_t size){
+  //uint8_t n;
+  switch(action){
+    case LOAD:
+      //for(n = size; n; --n) *ptr++ = eeprom_read_byte((uint8_t *)eeprom_addr++);
+//      eeprom_read_block((void *)ptr, (const void *)eeprom_addr, size);
+      break;
+    case SAVE:
+      //noInterrupts();
+      //for(n = size; n; --n){ wdt_reset(); eeprom_write_byte((uint8_t *)eeprom_addr++, *ptr++); }
+//      eeprom_write_block((const void *)ptr, (void *)eeprom_addr, size);
+      //interrupts();
+      break;
+    case SKIP:
+      //eeprom_addr += size;
+      break;
+  }
+  eeprom_addr += size;
+}
+
+template<typename T> void paramAction(uint8_t action, volatile T& value, uint8_t menuid, const char *label, const char* enumArray[], int32_t _min, int32_t _max, bool continuous) {
+  switch(action) {
+    case UPDATE:
+    case UPDATE_MENU:
+      if(((int32_t)value + encoder_val) < _min) value = (continuous) ? _max : _min;
+      else 
+        if(((int32_t)value + encoder_val) > _max) value = (continuous) ? _min : _max;
+        else value = (int32_t)value + encoder_val;
+      encoder_val = 0;
+
+      lcd.noCursor();
+      printlabel(action, menuid, label);  // print normal/menu label
+      if(enumArray == NULL) {  // print value
+        if((_min < 0) && (value >= 0)) lcd.print('+');  // add + sign for positive values, in case negative values are supported
+  //      lcd.print(value);
+      } else {
+        lcd.print(enumArray[value]);
+      }
+      lcd.blanks(); lcd.blanks(); //lcd.setCursor(0, 1);
+      break;
+    default:
+      actionCommon(action, (uint8_t *)&value, sizeof(value));
+      break;
+  }
+}
+
+int8_t paramAction(uint8_t action, uint8_t id = ALL)  // list of parameters
+{
+  if((action == SAVE) || (action == LOAD)){
+    eeprom_addr = EEPROM_OFFSET;
+    for(uint8_t _id = 1; _id < id; _id++) paramAction(SKIP, _id);
+  }
+  
+  if(id == ALL) for(id = 1; id != N_ALL_PARAMS+1; id++) paramAction(action, id);  // for all parameters
+
+  switch(id) {    // Visible parameters
+    case VOLUME:  paramAction(action, volume, 0x11, "Volume", NULL, -1, 16, false); break;
+    case MODE:    paramAction(action, mode, 0x12, "Mode", mode_label, 0, _N(mode_label) - 1, false); break;
+    case FILTER:  paramAction(action, filt, 0x13, "Filter BW", filt_label, 0, _N(filt_label) - 1, false); break;
+    case BAND:    paramAction(action, bandval, 0x14, "Band", band_label, 0, _N(band_label) - 1, false); break;
+    case STEP:    paramAction(action, stepsize, 0x15, "Tune Rate", stepsize_label, 0, _N(stepsize_label) - 1, false); break;
+    case AGC:     paramAction(action, eeprom_version, 0x18, "AGC", offon_label, 0, 1, false); break;
+    case NR:      paramAction(action, eeprom_version, 0x19, "NR", NULL, 0, 8, false); break;
+    case ATT:     paramAction(action, eeprom_version, 0x1A, "ATT", att_label, 0, 7, false); break;
+    case ATT2:    paramAction(action, eeprom_version, 0x1B, "ATT2", NULL, 0, 16, false); break;
+    case SMETER:  paramAction(action, eeprom_version, 0x1C, "S-meter", smode_label, 0, _N(smode_label) - 1, false); break;
+    case SWRMETER:paramAction(action, eeprom_version, 0x1D, "SWR Meter", swr_label, 0, _N(swr_label) - 1, false); break;
+    case CWDEC:   paramAction(action, eeprom_version, 0x21, "CW Decoder", offon_label, 0, 1, false); break;
+    case KEY_TX:  paramAction(action, eeprom_version, 0x28, "Practice", offon_label, 0, 1, false); break;
+    case DRIVE:   paramAction(action, eeprom_version, 0x33, "TX Drive", NULL, 0, 8, false); break;
+    case MOX:     paramAction(action, eeprom_version, 0x35, "MOX", NULL, 0, 2, false); break;
+    case PWM_MIN: paramAction(action, pwm_min, 0x81, "PA Bias min", NULL, 0, pwm_max - 1, false); break;
+    case PWM_MAX: paramAction(action, pwm_max, 0x82, "PA Bias max", NULL, pwm_min, 255, false); break;
+    case SIFXTAL: paramAction(action, eeprom_version, 0x83, "Ref freq", NULL, 14000000, 28000000, false); break;
+
+    // Invisible parameters
+    case VERS:    paramAction(action, eeprom_version, 0, NULL, NULL, 0, 0, false); break;
+
+    // Non-parameters
+    case _NULL_PARAM:   menumode = 0; show_banner(); change = true; break;
+    default:      if((action == NEXT_MENU) && (id != N_PARAMS)) id = paramAction(action, max(1, min(N_PARAMS, id + ((encoder_val > 0) ? 1 : -1))));
+      break;
+  }
+
+  return id;
+}
+
 /* USER CODE END 4 */
 
 /**

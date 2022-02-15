@@ -76,6 +76,12 @@ void Error_Handler(void);
 #define min(a,b) ((a)<(b)?(a):(b))
 #define max(a,b) ((a)>(b)?(a):(b))
 #define abs(x) ((x)>0?(x):-(x))
+
+#define _N(a) sizeof(a)/sizeof(a[0])
+#define N_PARAMS 39  // number of (visible) parameters
+#define N_ALL_PARAMS (N_PARAMS + 5)  // number of parameters
+
+#define EEPROM_OFFSET 0x150
 /* USER CODE END Private defines */
 
 #ifdef __cplusplus
