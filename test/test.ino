@@ -33,23 +33,23 @@ void setup() {
   
   Read_Value_EEPROM();
 
-  si5351.init(SI5351_CRYSTAL_LOAD_0PF, XTAL*1000000, Fcorr);
+  si5351.init(SI5351_CRYSTAL_LOAD_0PF, SI5351_FXTAL, 0);
 
-  switch (SI5351_DRIVE_CLK0){
+  switch (SI5351_DRIVE_CLK0) {
     case  2: si5351.drive_strength(SI5351_CLK0, SI5351_DRIVE_2MA); break;
     case  4: si5351.drive_strength(SI5351_CLK0, SI5351_DRIVE_4MA); break;
     case  6: si5351.drive_strength(SI5351_CLK0, SI5351_DRIVE_6MA); break;
     case  8: si5351.drive_strength(SI5351_CLK0, SI5351_DRIVE_8MA); break;
   }
 
-  switch (SI5351_DRIVE_CLK1){
+  switch (SI5351_DRIVE_CLK1) {
     case  2: si5351.drive_strength(SI5351_CLK1, SI5351_DRIVE_2MA); break;
     case  4: si5351.drive_strength(SI5351_CLK1, SI5351_DRIVE_4MA); break;
     case  6: si5351.drive_strength(SI5351_CLK1, SI5351_DRIVE_6MA); break;
     case  8: si5351.drive_strength(SI5351_CLK1, SI5351_DRIVE_8MA); break;
   }
 
-  switch (SI5351_DRIVE_CLK2){
+  switch (SI5351_DRIVE_CLK2) {
     case  2: si5351.drive_strength(SI5351_CLK2, SI5351_DRIVE_2MA); break;
     case  4: si5351.drive_strength(SI5351_CLK2, SI5351_DRIVE_4MA); break;
     case  6: si5351.drive_strength(SI5351_CLK2, SI5351_DRIVE_6MA); break;
@@ -268,11 +268,11 @@ void Read_Value_EEPROM() {
 /*
   EEPROM
   0-3   ( 4 Byte) IF
-  4     ( 1 Byte) XTAL
+  4     ( 1 Byte)
   5-7    NULL
   8-11  ( 4 Byte) Fmin
   12-15 ( 4 Byte) Fmax
-  16-19 ( 4 Byte) Fcorr
+  16-19 ( 4 Byte) SI5351_FXTAL
   20-23 ( 4 Byte) Ftx
   24-25 ( 2 Byte) Ftone
   26    ( 1 Byte) SI5351_DRIVE_CLK0   2MA 4MA 6MA 8MA 
@@ -288,29 +288,24 @@ void Read_Value_EEPROM() {
         IF = 1070000000ULL;
         EEPROM.put(0, IF);
       }
-      EEPROM.get(4, XTAL);   //XTAL = 27
-      if (XTAL > 50){
-        XTAL = 27;
-        EEPROM.put(4, XTAL);
-      }
-      EEPROM.get(8, Fmin);   //Fmin = 2.5кГц
-      if (Fmin > 4000000000){
-        Fmin = 250000;
+      EEPROM.get(8, Fmin);   //Fmin = 10кГц
+      if (Fmin > 4000000000) {
+        Fmin = 1000000;
         EEPROM.put(8, Fmin);
       }
       EEPROM.get(12, Fmax);  //F max 30 MHz  30.000.000.00
-      if (Fmax > 4000000000){
+      if (Fmax > 4000000000) {
         Fmax = 4000000000;
         EEPROM.put(12, Fmax);
       }
-      EEPROM.get(16, Fcorr); //Fcorr = 0;
-      if (Fcorr > 2000000){
-          Fcorr = 0;
-          EEPROM.put(16, Fcorr);          
+      EEPROM.get(16, SI5351_FXTAL); //SI5351_FXTAL = 0;
+      if (SI5351_FXTAL > 28000000) {
+          SI5351_FXTAL = 28000000;
+          EEPROM.put(16, SI5351_FXTAL);          
       }
-      if (Fcorr < -2000000){
-          Fcorr = 0;
-          EEPROM.put(16, Fcorr);
+      if (SI5351_FXTAL < 14000000){
+          SI5351_FXTAL = 14000000;
+          EEPROM.put(16, SI5351_FXTAL);
       }
       EEPROM.get(20, Ftx);   //Ftx  = 311000000;
       if (Ftx > 4000000000){
@@ -430,22 +425,21 @@ void F_setup() {
         else {
           switch (setup_count) {
             case 1: IF+=(STEP*100)*enc_move; if(IF > 4200000000) IF = 0; if(IF > 4000000000) IF = 4000000000; break;
-            case 2: XTAL+=enc_move; if(XTAL > 50) XTAL=50; break;
-            case 3: Fmin+=(STEP*100)*enc_move; if(Fmin < 250000) Fmin=250000; break;
-            case 4: Fmax+=(STEP*100)*enc_move; if(Fmax > 4000000000) Fmax=4000000000; break;
-            case 5: Fcorr+=(STEP/10)*enc_move; if(Fcorr > 10000000) Fcorr=10000000; if(Fcorr < -10000000) Fcorr=-10000000;  break;
-            case 6: Ftx+=(STEP*100)*enc_move; if(Ftx > Fmax) Ftx=Fmax; if(Ftx < Fmin) Ftx=Fmin; break;
-            case 7: Ftone+=(STEP/10)*enc_move; break;
-            case 8: if(enc_move == 1){ ftone_flag = true; tone(tone_pin, Ftone); } if(enc_move == -1){ ftone_flag = false; noTone(tone_pin); }; break;
-            case 9: if(enc_move == 1) { F_eeprom_w(); lcd.setCursor(0,1); lcd.print("    Complite!!! "); delay (1000); }; break; // EEPROM write
-            case 10: if(enc_move == 1) softReset(); break; // soft reboot
-            case 11: if(enc_move == 1) xF = 2; if(enc_move == -1) xF = 1; break; // xF
-            case 12: SI5351_DRIVE_CLK0+=enc_move*2; if(SI5351_DRIVE_CLK0 < 2) SI5351_DRIVE_CLK0 = 2; if(SI5351_DRIVE_CLK0 > 8) SI5351_DRIVE_CLK0 = 8;   break;
-            case 13: SI5351_DRIVE_CLK1+=enc_move*2; if(SI5351_DRIVE_CLK1 < 2) SI5351_DRIVE_CLK1 = 2; if(SI5351_DRIVE_CLK1 > 8) SI5351_DRIVE_CLK1 = 8;   break;
-            case 14: SI5351_DRIVE_CLK2+=enc_move*2; if(SI5351_DRIVE_CLK2 < 2) SI5351_DRIVE_CLK2 = 2; if(SI5351_DRIVE_CLK2 > 8) SI5351_DRIVE_CLK2 = 8;   break;
-            case 15: if(enc_move == 1) ENC_SPIN = 1; if(enc_move == -1) ENC_SPIN = -1; break;
-            case 16: IF2+=(STEP*100)*enc_move; if(IF2 > 4200000000) IF2 = 0; if(IF2 > 4000000000) IF2 = 4000000000; break;
-            case 17: if(enc_move == 1) { IF_WIDTH_FLAG = true; digitalWrite(IF_WIDTH_PIN, HIGH);}; if(enc_move == -1) { IF_WIDTH_FLAG = false; digitalWrite(IF_WIDTH_PIN, LOW);}; break;
+            case 2: Fmin+=(STEP*100)*enc_move; if(Fmin < 250000) Fmin=250000; break;
+            case 3: Fmax+=(STEP*100)*enc_move; if(Fmax > 4000000000) Fmax=4000000000; break;
+            case 4: SI5351_FXTAL+=(STEP)*enc_move; if(SI5351_FXTAL > 28*1e6) SI5351_FXTAL=28*1e6; if(SI5351_FXTAL < 14*1e6) SI5351_FXTAL=14*1e6;  break;
+            case 5: Ftx+=(STEP*100)*enc_move; if(Ftx > Fmax) Ftx=Fmax; if(Ftx < Fmin) Ftx=Fmin; break;
+            case 6: Ftone+=(STEP/10)*enc_move; break;
+            case 7: if(enc_move == 1){ ftone_flag = true; tone(tone_pin, Ftone); } if(enc_move == -1){ ftone_flag = false; noTone(tone_pin); }; break;
+            case 8: if(enc_move == 1) { F_eeprom_w(); lcd.setCursor(0,1); lcd.print("    Complite!!! "); delay (1000); }; break; // EEPROM write
+            case 9: if(enc_move == 1) softReset(); break; // soft reboot
+            case 10: if(enc_move == 1) xF = 2; if(enc_move == -1) xF = 1; break; // xF
+            case 11: SI5351_DRIVE_CLK0+=enc_move*2; if(SI5351_DRIVE_CLK0 < 2) SI5351_DRIVE_CLK0 = 2; if(SI5351_DRIVE_CLK0 > 8) SI5351_DRIVE_CLK0 = 8;   break;
+            case 12: SI5351_DRIVE_CLK1+=enc_move*2; if(SI5351_DRIVE_CLK1 < 2) SI5351_DRIVE_CLK1 = 2; if(SI5351_DRIVE_CLK1 > 8) SI5351_DRIVE_CLK1 = 8;   break;
+            case 13: SI5351_DRIVE_CLK2+=enc_move*2; if(SI5351_DRIVE_CLK2 < 2) SI5351_DRIVE_CLK2 = 2; if(SI5351_DRIVE_CLK2 > 8) SI5351_DRIVE_CLK2 = 8;   break;
+            case 14: if(enc_move == 1) ENC_SPIN = 1; if(enc_move == -1) ENC_SPIN = -1; break;
+            case 15: IF2+=(STEP*100)*enc_move; if(IF2 > 4200000000) IF2 = 0; if(IF2 > 4000000000) IF2 = 4000000000; break;
+            case 16: if(enc_move == 1) { IF_WIDTH_FLAG = true; digitalWrite(IF_WIDTH_PIN, HIGH);}; if(enc_move == -1) { IF_WIDTH_FLAG = false; digitalWrite(IF_WIDTH_PIN, LOW);}; break;
           }
         }
 
@@ -454,22 +448,21 @@ void F_setup() {
 
         switch (setup_count) {
           case 1:   lcd.print("IF");lcd.setCursor(0,1);lcd.print(IF/100); break;
-          case 2:   lcd.print("XTAL");lcd.setCursor(0,1);lcd.print(XTAL);lcd.print("MHz"); break;
-          case 3:   lcd.print("Fmin");lcd.setCursor(0,1);lcd.print(Fmin/100); break;
-          case 4:   lcd.print("Fmax");lcd.setCursor(0,1);lcd.print(Fmax/100); break;
-          case 5:   lcd.print("Fcorr");lcd.setCursor(0,1);lcd.print(Fcorr); break;
-          case 6:   lcd.print("Ftx");lcd.setCursor(0,1);lcd.print(Ftx/100); break;
-          case 7:   lcd.print("Ftone");lcd.setCursor(0,1);lcd.print(Ftone); break;
-          case 8:   lcd.print("Ftone On/Off");lcd.setCursor(0,1);if( ftone_flag) lcd.print("On"); else lcd.print("Off"); break;
-          case 9:   lcd.print("EEPROM Write"); lcd.setCursor(0,1); lcd.print("No/Yes?"); break;
-          case 10:  lcd.print("Reboot No/Yes?"); break;
-          case 11:  lcd.print("xF"); lcd.setCursor(0,1);lcd.print(xF);break;
-          case 12:  lcd.print("DRIVE_CLK0"); lcd.setCursor(0,1);lcd.print(SI5351_DRIVE_CLK0);break;
-          case 13:  lcd.print("DRIVE_CLK1"); lcd.setCursor(0,1);lcd.print(SI5351_DRIVE_CLK1);break;
-          case 14:  lcd.print("DRIVE_CLK2"); lcd.setCursor(0,1);lcd.print(SI5351_DRIVE_CLK2);break;
-          case 15:  lcd.print("ENC_SPIN"); lcd.setCursor(0,1);lcd.print(ENC_SPIN);break;
-          case 16:  lcd.print("IF2");lcd.setCursor(0,1);lcd.print(IF2/100); break;
-          case 17:  lcd.print("IF_WIDTH_PIN"); lcd.setCursor(0,1); if (IF_WIDTH_FLAG) lcd.print("ON"); else lcd.print("OFF"); break;
+          case 2:   lcd.print("Fmin");lcd.setCursor(0,1);lcd.print(Fmin/100); break;
+          case 3:   lcd.print("Fmax");lcd.setCursor(0,1);lcd.print(Fmax/100); break;
+          case 4:   lcd.print("SI5351_FXTAL");lcd.setCursor(0,1);lcd.print(SI5351_FXTAL); break;
+          case 5:   lcd.print("Ftx");lcd.setCursor(0,1);lcd.print(Ftx/100); break;
+          case 6:   lcd.print("Ftone");lcd.setCursor(0,1);lcd.print(Ftone); break;
+          case 7:   lcd.print("Ftone On/Off");lcd.setCursor(0,1);if( ftone_flag) lcd.print("On"); else lcd.print("Off"); break;
+          case 8:   lcd.print("EEPROM Write"); lcd.setCursor(0,1); lcd.print("No/Yes?"); break;
+          case 9:  lcd.print("Reboot No/Yes?"); break;
+          case 10:  lcd.print("xF"); lcd.setCursor(0,1);lcd.print(xF);break;
+          case 11:  lcd.print("DRIVE_CLK0"); lcd.setCursor(0,1);lcd.print(SI5351_DRIVE_CLK0);break;
+          case 12:  lcd.print("DRIVE_CLK1"); lcd.setCursor(0,1);lcd.print(SI5351_DRIVE_CLK1);break;
+          case 13:  lcd.print("DRIVE_CLK2"); lcd.setCursor(0,1);lcd.print(SI5351_DRIVE_CLK2);break;
+          case 14:  lcd.print("ENC_SPIN"); lcd.setCursor(0,1);lcd.print(ENC_SPIN);break;
+          case 15:  lcd.print("IF2");lcd.setCursor(0,1);lcd.print(IF2/100); break;
+          case 16:  lcd.print("IF_WIDTH_PIN"); lcd.setCursor(0,1); if (IF_WIDTH_FLAG) lcd.print("ON"); else lcd.print("OFF"); break;
         }
       enc_flag = false;
     }
@@ -484,10 +477,6 @@ long temp_l=0;
       if (IF != temp){
         EEPROM.put(0, IF);
       }
-      EEPROM.get(4, temp);   //XTAL = 27000000;
-      if (XTAL != temp){
-        EEPROM.put(4, XTAL);
-      }
       EEPROM.get(8, temp);   //Fmin = 30000000;            // min 300kHz   
       if (Fmin != temp){
         EEPROM.put(8, Fmin);
@@ -497,9 +486,9 @@ long temp_l=0;
         EEPROM.put(12, Fmax);
       }
       
-      EEPROM.get(16, temp_l); //Fcorr = 0;
-      if (Fcorr != temp_l){
-        EEPROM.put(16, Fcorr);
+      EEPROM.get(16, temp_l);
+      if (SI5351_FXTAL != temp_l){
+        EEPROM.put(16, SI5351_FXTAL);
       }
       
       EEPROM.get(20, temp);   //Ftx  = 311000000;
