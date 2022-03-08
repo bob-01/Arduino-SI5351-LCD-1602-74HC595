@@ -419,7 +419,7 @@ void F_setup() {
     if (enc_flag) {
         if(rit_flag) {
                setup_count = setup_count+enc_move;
-               if (setup_count > 17) { setup_count = 17;};
+               if (setup_count > 16) { setup_count = 16;};
                if (setup_count == 0) { setup_count = 1;};
         }
         else {
