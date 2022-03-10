@@ -56,10 +56,10 @@ void setup() {
     case  8: si5351.drive_strength(SI5351_CLK2, SI5351_DRIVE_8MA); break;
   }
   
-  si5351.set_freq(Frit+IF, SI5351_CLK0); //Set RX
+  si5351.set_freq(Frit * 100ULL + IF, SI5351_CLK0); //Set RX
  
   lcd.begin(16, 2);  /* Инициализируем дисплей: 2 строки по 16 символов */
-  F_print();
+  display_vfo(Frit);
   lcd.setCursor(10,1);   lcd.print("  1kHz  ");
 
   currentTime = millis();
@@ -201,7 +201,7 @@ void CHECK_BUTTON_PRESS() {
       if(setup_flag) {
         lcd.clear();
         enc_block = false;
-        F_print();
+        display_vfo(Frit);
         step_flag = 1;
         setup_flag = false; 
       } else {
@@ -214,55 +214,27 @@ void CHECK_BUTTON_PRESS() {
 
   if (enc_flag && enc_block == 0) {
     if(rit_flag == false) {
-      Ftx += (STEP*100)*enc_move;
-        if (Ftx < Fmin){ Ftx = Fmin; }
-        if (Ftx > Fmax){ Ftx = Fmax; }
+      Ftx += STEP*enc_move;
+        if (Ftx < Fmin) Ftx = Fmin;
+        if (Ftx > Fmax) Ftx = Fmax;
       Frit = Ftx;
     } else {
-      Frit = Frit + (STEP*100)*enc_move;
-      if (Frit < Fmin){ Frit = Fmin; }
-      if (Frit > Fmax){ Frit = Fmax; }
+      Frit = Frit + STEP*enc_move;
+      if (Frit < Fmin) Frit = Fmin;
+      if (Frit > Fmax) Frit = Fmax;
     }
 
     if (tx_flag == true) {
-      si5351.set_freq(Ftx*xF, SI5351_CLK1 );
-      si5351.set_freq(Frit+IF, SI5351_CLK0 );
+      si5351.set_freq(Ftx*xF * 100ULL, SI5351_CLK1 );
+      si5351.set_freq(Frit * 100ULL + IF, SI5351_CLK0 );
     } else {
-      si5351.set_freq(Frit+IF, SI5351_CLK0 );
+      si5351.set_freq(Frit * 100ULL + IF, SI5351_CLK0 );
     }
 
     enc_flag = false;
-    F_print();
+    display_vfo(Frit);
   }
 }
-
-void F_print() {
-  uint16_t mid;
-  //3.110.000.00
-  //9999.000.00
-  mid = Frit/100000;    //3.110.
-  lcd.setCursor(0,0);
-  lcd.write(' ');
-                  
-  if ( (mid/1000) > 9) {
-    lcd.setCursor(0,0);
-  }
-
-  lcd.print(mid/1000);
-  lcd.write('.');
-  
-  mid = (mid%1000);
-  lcd.print(mid/100);
-  mid = (mid%100);
-  lcd.print(mid/10);
-  lcd.print( mid%10);
-  lcd.write('.');
-  
-  mid = (Frit/1000)%100;
-
-  lcd.print( mid/10);
-  lcd.print( mid%10);
-}//end f_print
 
 void Read_Value_EEPROM() {
 /*
@@ -307,9 +279,9 @@ void Read_Value_EEPROM() {
           SI5351_FXTAL = 14000000;
           EEPROM.put(16, SI5351_FXTAL);
       }
-      EEPROM.get(20, Ftx);   //Ftx  = 311000000;
-      if (Ftx > 4000000000){
-        Ftx = 310000000;
+      EEPROM.get(20, Ftx);
+      if (Ftx > 150*1e6){
+        Ftx = 3.1*1e6;
         EEPROM.put(20, Ftx);
       }
       EEPROM.get(24, Ftone); //Ftone  = 1000;
@@ -364,7 +336,7 @@ void F_tx() {
   tx_flag = !tx_flag;
 
   if (tx_flag == true) {
-    si5351.set_freq(Ftx*xF, SI5351_CLK1 );
+    si5351.set_freq(Ftx*xF * 100ULL, SI5351_CLK1 );
     si5351.output_enable(SI5351_CLK1, 1);
     lcd.setCursor(0,1);
     lcd.print("TX  ");
@@ -397,10 +369,10 @@ void F_rit() {
     lcd.print("RIT");
   } else {
     Frit = Ftx;
-    si5351.set_freq(Frit+IF, SI5351_CLK0 );
+    si5351.set_freq(Frit * 100ULL + IF, SI5351_CLK0 );
     lcd.setCursor(10,0);
     lcd.print("   ");
-    F_print(); 
+    display_vfo(Frit); 
   }
 }// End F rit
 
@@ -428,7 +400,7 @@ void F_setup() {
             case 2: Fmin+=(STEP*100)*enc_move; if(Fmin < 250000) Fmin=250000; break;
             case 3: Fmax+=(STEP*100)*enc_move; if(Fmax > 4000000000) Fmax=4000000000; break;
             case 4: SI5351_FXTAL+=(STEP)*enc_move; if(SI5351_FXTAL > 28*1e6) SI5351_FXTAL=28*1e6; if(SI5351_FXTAL < 14*1e6) SI5351_FXTAL=14*1e6;  break;
-            case 5: Ftx+=(STEP*100)*enc_move; if(Ftx > Fmax) Ftx=Fmax; if(Ftx < Fmin) Ftx=Fmin; break;
+            case 5: Ftx+=STEP*enc_move; if(Ftx > Fmax) Ftx=Fmax; if(Ftx < Fmin) Ftx=Fmin; break;
             case 6: Ftone+=(STEP/10)*enc_move; break;
             case 7: if(enc_move == 1){ ftone_flag = true; tone(tone_pin, Ftone); } if(enc_move == -1){ ftone_flag = false; noTone(tone_pin); }; break;
             case 8: if(enc_move == 1) { F_eeprom_w(); lcd.setCursor(0,1); lcd.print("    Complite!!! "); delay (1000); }; break; // EEPROM write
@@ -451,11 +423,11 @@ void F_setup() {
           case 2:   lcd.print("Fmin");lcd.setCursor(0,1);lcd.print(Fmin/100); break;
           case 3:   lcd.print("Fmax");lcd.setCursor(0,1);lcd.print(Fmax/100); break;
           case 4:   lcd.print("SI5351_FXTAL");lcd.setCursor(0,1);lcd.print(SI5351_FXTAL); break;
-          case 5:   lcd.print("Ftx");lcd.setCursor(0,1);lcd.print(Ftx/100); break;
+          case 5:   lcd.print("Ftx");lcd.setCursor(0,1);lcd.print(Ftx); break;
           case 6:   lcd.print("Ftone");lcd.setCursor(0,1);lcd.print(Ftone); break;
           case 7:   lcd.print("Ftone On/Off");lcd.setCursor(0,1);if( ftone_flag) lcd.print("On"); else lcd.print("Off"); break;
           case 8:   lcd.print("EEPROM Write"); lcd.setCursor(0,1); lcd.print("No/Yes?"); break;
-          case 9:  lcd.print("Reboot No/Yes?"); break;
+          case 9:   lcd.print("Reboot No/Yes?"); break;
           case 10:  lcd.print("xF"); lcd.setCursor(0,1);lcd.print(xF);break;
           case 11:  lcd.print("DRIVE_CLK0"); lcd.setCursor(0,1);lcd.print(SI5351_DRIVE_CLK0);break;
           case 12:  lcd.print("DRIVE_CLK1"); lcd.setCursor(0,1);lcd.print(SI5351_DRIVE_CLK1);break;
@@ -491,7 +463,7 @@ long temp_l=0;
         EEPROM.put(16, SI5351_FXTAL);
       }
       
-      EEPROM.get(20, temp);   //Ftx  = 311000000;
+      EEPROM.get(20, temp);
       if (Ftx != temp){
         EEPROM.put(20, Ftx);
       }
@@ -549,6 +521,20 @@ long temp_l=0;
         IF_WIDTH_FLAG = temp;
         EEPROM.put(35, IF_WIDTH_FLAG);
       }
+}
+
+void display_vfo(int32_t freq) {
+  lcd.noCursor();
+  lcd.setCursor(0, 0);
+
+  int32_t scale=1e8;
+  if(freq/scale == 0) { lcd.print(' '); scale/=10; }
+  if(freq/scale == 0) { lcd.print(' '); scale/=10; }
+
+  for(; scale!=1; freq %= scale, scale /= 10) {
+    lcd.print(char('0' + freq/scale));
+    if(scale == (int32_t)1e3 || scale == (int32_t)1e6) lcd.print('.');
+  }
 }
 
 void softReset(){

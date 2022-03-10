@@ -32,8 +32,8 @@
 
 Si5351 si5351;
 
-unsigned long currentTime,loopTime;
-unsigned long IF, IF2, Fmin, Fmax, Ftx, Frit, STEP;
+unsigned long currentTime, loopTime;
+unsigned long IF, IF2, Fmin, Fmax, Ftx = 3100000, Frit = Ftx, STEP;
 unsigned long SI5351_FXTAL;
 
 boolean resetFlag, enc_block=false, enc_flag=false, rit_flag=false, Button_flag=false, tx_flag=false, vcxo_flag=false, step_flag=false, setup_flag=false;
