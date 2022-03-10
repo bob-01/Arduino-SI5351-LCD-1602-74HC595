@@ -396,9 +396,9 @@ void F_setup() {
         }
         else {
           switch (setup_count) {
-            case 1: IF+=(STEP*100)*enc_move; if(IF > 4200000000) IF = 0; if(IF > 4000000000) IF = 4000000000; break;
-            case 2: Fmin+=(STEP*100)*enc_move; if(Fmin < 250000) Fmin=250000; break;
-            case 3: Fmax+=(STEP*100)*enc_move; if(Fmax > 4000000000) Fmax=4000000000; break;
+            case 1: IF+=STEP*enc_move; if(IF > 4200000000) IF = 0; if(IF > 4000000000) IF = 4000000000; break;
+            case 2: Fmin+=STEP*enc_move; if(Fmin < 250000) Fmin=250000; break;
+            case 3: Fmax+=STEP*enc_move; if(Fmax > 4000000000) Fmax=4000000000; break;
             case 4: SI5351_FXTAL+=(STEP)*enc_move; if(SI5351_FXTAL > 28*1e6) SI5351_FXTAL=28*1e6; if(SI5351_FXTAL < 14*1e6) SI5351_FXTAL=14*1e6;  break;
             case 5: Ftx+=STEP*enc_move; if(Ftx > Fmax) Ftx=Fmax; if(Ftx < Fmin) Ftx=Fmin; break;
             case 6: Ftone+=(STEP/10)*enc_move; break;
