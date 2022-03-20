@@ -56,7 +56,7 @@ void setup() {
     case  8: si5351.drive_strength(SI5351_CLK2, SI5351_DRIVE_8MA); break;
   }
   
-  si5351.set_freq(Frit * 100ULL + IF, SI5351_CLK0); //Set RX
+  si5351.set_freq((Frit + IF) * 100ULL, SI5351_CLK0); //Set RX
  
   lcd.begin(16, 2);  /* Инициализируем дисплей: 2 строки по 16 символов */
   display_vfo(Frit);
@@ -226,9 +226,9 @@ void CHECK_BUTTON_PRESS() {
 
     if (tx_flag == true) {
       si5351.set_freq(Ftx*xF * 100ULL, SI5351_CLK1 );
-      si5351.set_freq(Frit * 100ULL + IF, SI5351_CLK0 );
+      si5351.set_freq((Frit + IF) * 100ULL, SI5351_CLK0 );
     } else {
-      si5351.set_freq(Frit * 100ULL + IF, SI5351_CLK0 );
+      si5351.set_freq((Frit + IF) * 100ULL, SI5351_CLK0 );
     }
 
     enc_flag = false;
@@ -256,8 +256,8 @@ void Read_Value_EEPROM() {
   35    ( 1 Byte) IF_WIDTH_FLAG
 */
       EEPROM.get(0, IF);     //Первая ПЧ
-      if (IF > 4000000000){
-        IF = 1070000000ULL;
+      if (IF > 120000000) {
+        IF = 0;
         EEPROM.put(0, IF);
       }
       EEPROM.get(8, Fmin);   //Fmin = 10кГц
@@ -369,7 +369,7 @@ void F_rit() {
     lcd.print("RIT");
   } else {
     Frit = Ftx;
-    si5351.set_freq(Frit * 100ULL + IF, SI5351_CLK0 );
+    si5351.set_freq((Frit + IF) * 100ULL, SI5351_CLK0 );
     lcd.setCursor(10,0);
     lcd.print("   ");
     display_vfo(Frit); 
@@ -396,7 +396,7 @@ void F_setup() {
         }
         else {
           switch (setup_count) {
-            case 1: IF+=STEP*enc_move; if(IF > 4200000000) IF = 0; if(IF > 4000000000) IF = 4000000000; break;
+            case 1: IF += STEP*enc_move; if(IF > 120000000) IF = 120000000; if(IF < 0) IF = 0; break;
             case 2: Fmin+=STEP*enc_move; if(Fmin < 250000) Fmin=250000; break;
             case 3: Fmax+=STEP*enc_move; if(Fmax > 4000000000) Fmax=4000000000; break;
             case 4: SI5351_FXTAL+=(STEP)*enc_move; if(SI5351_FXTAL > 28*1e6) SI5351_FXTAL=28*1e6; if(SI5351_FXTAL < 14*1e6) SI5351_FXTAL=14*1e6;  break;
@@ -419,7 +419,7 @@ void F_setup() {
         lcd.setCursor(0,0);
 
         switch (setup_count) {
-          case 1:   lcd.print("IF");lcd.setCursor(0,1);lcd.print(IF/100); break;
+          case 1:   lcd.print("IF");lcd.setCursor(0,1);lcd.print(IF); break;
           case 2:   lcd.print("Fmin");lcd.setCursor(0,1);lcd.print(Fmin/100); break;
           case 3:   lcd.print("Fmax");lcd.setCursor(0,1);lcd.print(Fmax/100); break;
           case 4:   lcd.print("SI5351_FXTAL");lcd.setCursor(0,1);lcd.print(SI5351_FXTAL); break;
