@@ -262,17 +262,17 @@ void Read_Value_EEPROM() {
       }
       EEPROM.get(8, Fmin);   //Fmin = 10кГц
       if (Fmin > 4000000000) {
-        Fmin = 1000000;
+        Fmin = 10000;
         EEPROM.put(8, Fmin);
       }
       EEPROM.get(12, Fmax);  //F max 30 MHz  30.000.000.00
       if (Fmax > 4000000000) {
-        Fmax = 4000000000;
+        Fmax = 999000000;
         EEPROM.put(12, Fmax);
       }
       EEPROM.get(16, SI5351_FXTAL); //SI5351_FXTAL = 0;
-      if (SI5351_FXTAL > 28000000) {
-          SI5351_FXTAL = 28000000;
+      if (SI5351_FXTAL > 32000000) {
+          SI5351_FXTAL = 32000000;
           EEPROM.put(16, SI5351_FXTAL);          
       }
       if (SI5351_FXTAL < 14000000){
@@ -396,12 +396,12 @@ void F_setup() {
         }
         else {
           switch (setup_count) {
-            case 1: IF += STEP*enc_move; if(IF > 120000000) IF = 120000000; if(IF < 0) IF = 0; break;
-            case 2: Fmin+=STEP*enc_move; if(Fmin < 250000) Fmin=250000; break;
-            case 3: Fmax+=STEP*enc_move; if(Fmax > 4000000000) Fmax=4000000000; break;
-            case 4: SI5351_FXTAL+=(STEP)*enc_move; if(SI5351_FXTAL > 28*1e6) SI5351_FXTAL=28*1e6; if(SI5351_FXTAL < 14*1e6) SI5351_FXTAL=14*1e6;  break;
-            case 5: Ftx+=STEP*enc_move; if(Ftx > Fmax) Ftx=Fmax; if(Ftx < Fmin) Ftx=Fmin; break;
-            case 6: Ftone+=(STEP/10)*enc_move; break;
+            case 1: IF += STEP*enc_move; if(IF > 120000000) IF = 120000000; if(IF > 4000000000) IF = 0; break;
+            case 2: Fmin += STEP*enc_move; if(Fmin < 10000) Fmin=10000; break;
+            case 3: Fmax += STEP*enc_move; if(Fmax > 999000000) Fmax = 999000000; break;
+            case 4: SI5351_FXTAL+=(STEP)*enc_move; if(SI5351_FXTAL > 32*1e6) SI5351_FXTAL=32*1e6; if(SI5351_FXTAL < 14*1e6) SI5351_FXTAL=14*1e6;  break;
+            case 5: Ftx += STEP*enc_move; if(Ftx > Fmax) Ftx=Fmax; if(Ftx < Fmin) Ftx=Fmin; break;
+            case 6: Ftone += (STEP/10)*enc_move; break;
             case 7: if(enc_move == 1){ ftone_flag = true; tone(tone_pin, Ftone); } if(enc_move == -1){ ftone_flag = false; noTone(tone_pin); }; break;
             case 8: if(enc_move == 1) { F_eeprom_w(); lcd.setCursor(0,1); lcd.print("    Complite!!! "); delay (1000); }; break; // EEPROM write
             case 9: if(enc_move == 1) softReset(); break; // soft reboot
@@ -420,8 +420,8 @@ void F_setup() {
 
         switch (setup_count) {
           case 1:   lcd.print("IF");lcd.setCursor(0,1);lcd.print(IF); break;
-          case 2:   lcd.print("Fmin");lcd.setCursor(0,1);lcd.print(Fmin/100); break;
-          case 3:   lcd.print("Fmax");lcd.setCursor(0,1);lcd.print(Fmax/100); break;
+          case 2:   lcd.print("Fmin");lcd.setCursor(0,1);lcd.print(Fmin); break;
+          case 3:   lcd.print("Fmax");lcd.setCursor(0,1);lcd.print(Fmax); break;
           case 4:   lcd.print("SI5351_FXTAL");lcd.setCursor(0,1);lcd.print(SI5351_FXTAL); break;
           case 5:   lcd.print("Ftx");lcd.setCursor(0,1);lcd.print(Ftx); break;
           case 6:   lcd.print("Ftone");lcd.setCursor(0,1);lcd.print(Ftone); break;
