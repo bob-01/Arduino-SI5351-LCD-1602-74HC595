@@ -64,40 +64,17 @@ void LiquidCrystal::begin(uint8_t cols, uint8_t lines, uint8_t dotsize) {
   // before sending commands. Arduino can turn on way befer 4.5V so we'll wait 50
   delayMicroseconds(50000); 
   
-  //put the LCD into 4 bit or 8 bit mode
-  if (! (_displayfunction & LCD_8BITMODE)) {
-    // this is according to the hitachi HD44780 datasheet
-    // figure 24, pg 46
+  // this is according to the hitachi HD44780 datasheet
+  // page 45 figure 23
 
-    // we start in 8bit mode, try to set 4 bit mode
-    write4bits(0x03);
-    delayMicroseconds(4500); // wait min 4.1ms
+  // Send function set command sequence
+  command(LCD_FUNCTIONSET | _displayfunction);
+  delayMicroseconds(4500);  // wait more than 4.1ms
 
-    // second try
-    write4bits(0x03);
-    delayMicroseconds(4500); // wait min 4.1ms
-    
-    // third go!
-    write4bits(0x03); 
-    delayMicroseconds(150);
+  command(LCD_FUNCTIONSET | _displayfunction);
+  delayMicroseconds(150);
 
-    // finally, set to 4-bit interface
-    write4bits(0x02); 
-  } else {
-    // this is according to the hitachi HD44780 datasheet
-    // page 45 figure 23
-
-    // Send function set command sequence
-    command(LCD_FUNCTIONSET | _displayfunction);
-    delayMicroseconds(4500);  // wait more than 4.1ms
-
-    // second try
-    command(LCD_FUNCTIONSET | _displayfunction);
-    delayMicroseconds(150);
-
-    // third go
-    command(LCD_FUNCTIONSET | _displayfunction);
-  }
+  command(LCD_FUNCTIONSET | _displayfunction);
 
   // finally, set # lines, font size, etc.
   command(LCD_FUNCTIONSET | _displayfunction);  
@@ -113,7 +90,6 @@ void LiquidCrystal::begin(uint8_t cols, uint8_t lines, uint8_t dotsize) {
   _displaymode = LCD_ENTRYLEFT | LCD_ENTRYSHIFTDECREMENT;
   // set the entry mode
   command(LCD_ENTRYMODESET | _displaymode);
-
 }
 
 /********** high level commands, for the user! */
@@ -222,63 +198,23 @@ inline size_t LiquidCrystal::write(uint8_t value) {
   return 1; // assume sucess
 }
 
-/************ low level data pushing commands **********/
+// mode: 0 - command, 1 - data
+void LiquidCrystal::send (uint8_t value, uint8_t mode)
+{
+  uint8_t i;
+  uint8_t MSB = 1; //MSB
 
-// write either command or data, with automatic 4/8-bit selection
-void LiquidCrystal::send(uint8_t value, uint8_t mode){
-   uint8_t i;
-//MSB
-uint8_t bitOrder=1;
-
-          for (i = 0; i < 8; i++) {
-                     if (bitOrder == 0)
-                          digitalWrite(_data_pin,(value & (0x01 << i)));  //LSB
-                     else digitalWrite(_data_pin,(value & (0x80 >> i)));  //MSB
-                     
-                     digitalWrite(_clk_pin, HIGH);
-                     delayMicroseconds(10);
-                     digitalWrite(_clk_pin, LOW);
-          }
-            
-            digitalWrite(_data_pin, mode);  //psevdo RS
-            delayMicroseconds(10);
-            digitalWrite(_enable_pin, HIGH);
-            delayMicroseconds(10);
-            digitalWrite(_enable_pin, LOW);
-}
-
-/*
-send(uint8_t value, uint8_t mode) {
-    bitWrite(_bitString, 1, mode); //set RS to mode
-    spiSendOut();    
-	//we are not using RW with SPI so we are not even bothering
-	//or 8BITMODE so we go straight to write4bits
-    write4bits(value>>4);
-    write4bits(value);    
-}
-*/
-void LiquidCrystal::write4bits(uint8_t value) {
-
-
-/*
-  for (int i = 0; i < 4; i++) {
-    pinMode(_data_pins[i], OUTPUT);
-    digitalWrite(_data_pins[i], (value >> i) & 0x01);
+  for(i = 0; i < 8; i++) {
+    if (MSB == 0) 
+        //digitalWrite(_data_pin,(value & (0x01 << i))); // LSB
+        value & (0x01 << i) ? PORTD |= B00010000 : PORTD &= ~B00010000;
+    else
+        //digitalWrite(_data_pin,(value & (0x80 >> i)));  //MSB
+        value & (0x80 >> i) ? PORTD |= B00010000 : PORTD &= ~B00010000;
+    STRUB_CLK_PIN;
   }
 
-//  pulseEnable();
-*/
+  //digitalWrite(_data_pin, mode);  //psevdo RS
+  mode ? PORTD |= B00010000 : PORTD &= ~B00010000;
+  STRUB_EN_PIN;
 }
-
-void LiquidCrystal::write8bits(uint8_t value) {
-
-/*
-  for (int i = 0; i < 8; i++) {
-    pinMode(_data_pins[i], OUTPUT);
-    digitalWrite(_data_pins[i], (value >> i) & 0x01);
-  }
-  
-//  pulseEnable();
-*/
-}
-

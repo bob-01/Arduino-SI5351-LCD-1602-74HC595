@@ -42,9 +42,14 @@
 #define LCD_5x10DOTS 0x04
 #define LCD_5x8DOTS 0x00
 
+//#define LCD_DATA_PIN_SET(state) (HAL_GPIO_WritePin(GPIOB, GPIO_PIN_3, state))
+//#define LCD_CLK_PIN_SET(state) (HAL_GPIO_WritePin(GPIOB, GPIO_PIN_4, state))
+//#define LCD_EN_PIN_SET(state) (HAL_GPIO_WritePin(GPIOB, GPIO_PIN_5, state))
+#define STRUB_EN_PIN    digitalWrite(_enable_pin, HIGH); digitalWrite(_enable_pin, LOW);
+#define STRUB_CLK_PIN   digitalWrite(_clk_pin, HIGH); digitalWrite(_clk_pin, LOW);
+
 class LiquidCrystal : public Print {
 public:
-
   LiquidCrystal(uint8_t data_pin, uint8_t clk_pin, uint8_t enable_pin);
 		
   void init(uint8_t fourbitmode, uint8_t data_pin, uint8_t clk_pin, uint8_t enable_pin);
@@ -70,10 +75,9 @@ public:
   void setCursor(uint8_t, uint8_t); 
   virtual size_t write(uint8_t);
   void command(uint8_t);
+
 private:
   void send(uint8_t, uint8_t);
-  void write4bits(uint8_t);
-  void write8bits(uint8_t);
     
   uint8_t _displayfunction;
   uint8_t _displaycontrol;

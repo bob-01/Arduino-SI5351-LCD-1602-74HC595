@@ -1,10 +1,41 @@
+/*
+  By TF3LJ / VE2LJX
+
+  https://sites.google.com/site/lofturj/power-and-swr-meter
+
+  30:1 gives a coupling of 1/30, or [20log(1/30)] -29.5dB
+  The voltage division gives a further attenuation of [20log(23.5/150.5)] -16.1dB
+  The maximum input power specified for AD8307 is 17dBm.  Then the maximum input power the meter can handle is:
+  17dBm + 16.1dB + 29.5 dB = 62.6 dBm or 32.6dBW, which is 1800W.
+
+  While this adds the benefit of a simpler circuit and higher measurement 
+  resolution (0.1 dB when using 10 bit ADC, 0.025 dB when using 12 bit ADC),
+  it caps or limits the max AD8307 input to approximately 15.5 dBm, rather than the 17dBm as specified.
+  A very acceptable trade off for the higher measurement resolution. 
+
+  In other words, the highest possible input power reading when 
+  using 30:1 transformers and a 127 ohm + 23.5 ohm (24 ohm in parallel with the internal 1100 ohm in the AD8307) 
+  voltage divider is just over 1kW (1300W). 
+
+  To be able to measure power levels above 500W (or 200W in reality, with high SWR levels)
+  you may need to use larger cores for the Tandem Match coupler. 
+
+  Using T68-2 or T68-3 cores and a 40:1 ratio, as described in the ARRL Antenna Book, or perhaps better,
+  FT114-61, will make the meter suitable for power levels up to 2kW,
+  without any modification required of the resistors R1 through R8.
+
+  10 bit gives 5V/1024 = 4.88mV per bit, which equals 0.1952 dB measurement resolution
+
+  dBm = 10 * log(P)              where P is power in milliwatts; or
+  dBm = 10 * log(P) + 30         where P is power in watts
+*/
+
 #include "main.h"
 
 // data_pin(rs)(orange), clk_pin (purpur) , enable_pin (red)
 LiquidCrystal lcd(4, 5, 6);
 
 void setup() {
-
   pinMode(ROT_A, INPUT);
   pinMode(ROT_B, INPUT);
   digitalWrite(ROT_A, HIGH);
@@ -23,6 +54,12 @@ void setup() {
 
   #ifdef BUTTON_TONE_ENABLE
       pinMode(BUTTON_TONE, INPUT_PULLUP);
+  #endif
+
+  #ifdef SWR
+    // For the AD converters
+    pinMode (analogInputFWD, INPUT); //input from AD8307
+    pinMode (analogInputREF, INPUT); //input from AD8307
   #endif
 
   digitalWrite(BUTTON_VCXO, HIGH); 
@@ -61,9 +98,6 @@ void setup() {
   lcd.begin(16, 2);  /* Инициализируем дисплей: 2 строки по 16 символов */
   display_vfo(Frit);
   lcd.setCursor(10,1);   lcd.print("  1kHz  ");
-
-  currentTime = millis();
-  loopTime = currentTime; 
 }
 
 void int0() {
@@ -84,61 +118,47 @@ void encTick() {
 }
 
 void loop() {
-  currentTime = millis();
-
   // Проверка каждые 5 мс
-  if(currentTime >= (loopTime + 5)) {
-    CHECK_BUTTON_PRESS();        
-    smeter_count++;
-    loopTime = currentTime; // Счетчик прошедшего времени      
+  if (millis() - _5msTime > 5) {
+    _5msTime = millis();
+    _5msFunction();
   }
 
-    if ( (smeter_count % 100 == 0) && !setup_flag) {
-        count_avr++;
+  if (millis() - _100msTime > 100) {
+    _100msTime = millis();
+    _100msFunction();
+  }
 
-        if (!tx_flag) {
-            uSMETER += analogRead(Smeter);
-        }
+  if (millis() - _1000msTime > 1000) {
+    _1000msTime = millis();
+    _1000msFunction();
+  }
+ 
+  if (step_flag) {
+      if(enc_flag) {
+        enc_flag = false;
+        step_count = step_count + enc_move;
+        if (step_count > 6) { step_count = 6;};
+        if (step_count == 0) { step_count = 1;};
+      }
 
-        if (count_avr >= 10) {
-          smeter_count = 0;
-          count_avr = 0;
+      lcd.setCursor(10,1);
+      switch (step_count) {
+        case  1: STEP = 10;       lcd.print("  10"); break;   //10Hz
+        case  2: STEP = 100;      lcd.print(" 100"); break;   //100Hz
+        case  3: STEP = 1000;     lcd.print("  1k"); break;   //1kHz
+        case  4: STEP = 5000;     lcd.print("  5k"); break;
+        case  5: STEP = 10000;    lcd.print(" 10k"); break;   //10kHz
+        case  6: STEP = 100000;   lcd.print("100k"); break;   //100kHz
+      }
 
-          if (!tx_flag) {
-            uSMETER = uSMETER/10;
-            lcd.setCursor(0,1);
-            lcd.print(uSMETER); 
-            lcd.print("   ");
-          }
-        }//End  if (count_avr > 3) 
-    }//End s_meter
-    
-    if (step_flag) {
-        if(enc_flag)
-        {
-          enc_flag = false;
-          step_count = step_count + enc_move;
-          if (step_count > 6) { step_count = 6;};
-          if (step_count == 0) { step_count = 1;};
-        }
+      lcd.print("Hz");
+    return;
+  }//End Step flag
 
-        lcd.setCursor(10,1);
-        switch (step_count) {
-          case  1: STEP = 10;       lcd.print("  10"); break;   //10Hz
-          case  2: STEP = 100;      lcd.print(" 100"); break;   //100Hz
-          case  3: STEP = 1000;     lcd.print("  1k"); break;   //1kHz
-          case  4: STEP = 5000;     lcd.print("  5k"); break;
-          case  5: STEP = 10000;    lcd.print(" 10k"); break;   //10kHz
-          case  6: STEP = 100000;   lcd.print("100k"); break;   //100kHz
-        }
-
-        lcd.print("Hz");
-      return;
-    }//End Step flag
-
-    if(setup_flag) {
-        F_setup();
-    }
+  if(setup_flag) {
+      F_setup();
+  }
 }//End loop
 
 void CHECK_BUTTON_PRESS() {
@@ -175,13 +195,13 @@ void CHECK_BUTTON_PRESS() {
         step_flag = !step_flag;
       }//End BUTTON_STEP
 
-      if (digitalRead(BUTTON_VCXO) == 0) {
+      if (digitalRead(BUTTON_VCXO) == 0 && !tx_flag) {
         Button_flag = true;                 
         vcxo_flag = !vcxo_flag;
         F_if2();
       }//End BUTTON_VCXO
       
-      if (digitalRead(BUTTON_RIT) == 0) {
+      if (digitalRead(BUTTON_RIT) == 0 && !tx_flag) {
         Button_flag = true;                 
         rit_flag = !rit_flag;
         menu_count = 0;
@@ -344,8 +364,25 @@ void F_tx() {
   }
   else {
     digitalWrite(TX_OUT, LOW);
-    lcd.setCursor(0,1);
-    lcd.print("   ");
+
+    lcd.setCursor(10, 0);
+    lcd.print("      ");
+
+    lcd.setCursor(0, 1);
+    lcd.print("                ");
+
+    lcd.setCursor(10,1);
+    switch (step_count) {
+      case  1: STEP = 10;       lcd.print("  10"); break;   //10Hz
+      case  2: STEP = 100;      lcd.print(" 100"); break;   //100Hz
+      case  3: STEP = 1000;     lcd.print("  1k"); break;   //1kHz
+      case  4: STEP = 5000;     lcd.print("  5k"); break;
+      case  5: STEP = 10000;    lcd.print(" 10k"); break;   //10kHz
+      case  6: STEP = 100000;   lcd.print("100k"); break;   //100kHz
+    }
+
+    lcd.print("Hz");
+
     si5351.output_enable(SI5351_CLK1, 0);
   }
 }//End F tx
@@ -440,7 +477,7 @@ void F_setup() {
     }
 }// End F setup
 
-void F_eeprom_w(){
+void F_eeprom_w() {
 
 unsigned long temp=0;
 long temp_l=0;
@@ -523,20 +560,65 @@ long temp_l=0;
       }
 }
 
-void display_vfo(int32_t freq) {
+void display_vfo(int32_t f) {
   lcd.noCursor();
   lcd.setCursor(0, 0);
 
-  int32_t scale=1e8;
-  if(freq/scale == 0) { lcd.print(' '); scale/=10; }
-  if(freq/scale == 0) { lcd.print(' '); scale/=10; }
+  int32_t scale = 1e8;
+  if(f/scale == 0) { lcd.print(' '); scale /= 10; }
+  if(f/scale == 0) { lcd.print(' '); scale /= 10; }
 
-  for(; scale!=1; freq %= scale, scale /= 10) {
-    lcd.print(char('0' + freq/scale));
+  for(; scale != 1; f %= scale, scale /= 10) {
+    lcd.print(char('0' + f/scale));
     if(scale == (int32_t)1e3 || scale == (int32_t)1e6) lcd.print('.');
   }
 }
 
-void softReset(){
+void softReset() {
   asm volatile ("  jmp 0");
+}
+
+void _5msFunction() {
+  CHECK_BUTTON_PRESS();
+  
+  #ifdef SWR
+    adc_poll(analogInputFWD, analogInputREF);
+    pswr_determine_dBm();                       // Convert raw A/D values to dBm
+    determine_power_and_swr();                  // Calculate power and swr, diode detector
+  #endif
+}
+
+void _100msFunction() {
+  if (tx_flag) {
+    #ifdef SWR
+      lcd.setCursor(11, 0);
+      lcd.print("AM   ");
+      lcd.setCursor(14, 0);
+      //lcd.print((int)modulation_index);
+      lcd.print((int)power_db_pk);
+
+      lcd.setCursor(0, 1);
+      lcd.print("P     ");
+      lcd.setCursor(2, 1);
+      lcd.print((int)power_db_pep);
+
+      lcd.setCursor(7, 1);
+      lcd.print(" SWR ");
+      lcd.print("     ");
+      lcd.setCursor(12, 1);
+      lcd.print(swr);
+    #endif
+  } else {
+    if (setup_flag) return;
+
+    uint16_t tmp = AdcReadAvrValue(Smeter);
+    uSMETER = (tmp + uSMETER)/2;
+    lcd.setCursor(0,1);
+    lcd.print("    ");
+    lcd.setCursor(0,1);
+    lcd.print(uSMETER);
+  }
+}
+
+void _1000msFunction() {
 }
