@@ -8,3 +8,4 @@ Core/Startup/
 stm32/.*
 stm32/*.launch
 stm32/Core/Startup/startup_stm32f030k6tx.s
+build/

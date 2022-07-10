@@ -118,7 +118,6 @@ void encTick() {
 }
 
 void loop() {
-  // Проверка каждые 5 мс
   if (millis() - _5msTime > 5) {
     _5msTime = millis();
     _5msFunction();
@@ -185,6 +184,7 @@ void CHECK_BUTTON_PRESS() {
       if (digitalRead(BUTTON_TX) == 0) {
         Button_flag = true;
         F_tx();
+        return;
       }//End BUTTON_TX
 
       if (digitalRead(BUTTON_STEP) == 0) {
@@ -193,42 +193,57 @@ void CHECK_BUTTON_PRESS() {
         if(!setup_flag) enc_block = !enc_block;
 
         step_flag = !step_flag;
+        return;
       }//End BUTTON_STEP
 
       if (digitalRead(BUTTON_VCXO) == 0 && !tx_flag) {
         Button_flag = true;                 
         vcxo_flag = !vcxo_flag;
         F_if2();
+        return;
       }//End BUTTON_VCXO
       
       if (digitalRead(BUTTON_RIT) == 0 && !tx_flag) {
-        Button_flag = true;                 
+        Button_flag = true;
         rit_flag = !rit_flag;
-        menu_count = 0;
+
+        uint32_t t0 = millis();
+        for(; !digitalRead(BUTTON_RIT);) {
+          if((millis() - t0) > 300) {
+            setup_flag = !setup_flag;
+
+            if(setup_flag) {
+              lcd.clear();
+              enc_flag = true;
+              enc_block = true;
+              rit_flag = true;
+
+              lcd.clear();
+              lcd.setCursor(0,0);
+              lcd.print("Setup");
+              delay(400);
+              lcd.clear();
+
+              F_setup();
+            } else {
+              lcd.clear();
+              enc_block = false;
+              rit_flag = false;
+              display_vfo(Frit);
+              setup_flag = false;
+            }
+
+            t0 = 0;
+            break;
+          }
+        }
+
+        if (!setup_flag) F_rit();
       }//End BUTTON_RIT
   }
 
   if (digitalRead(BUTTON_TX) == 1 && digitalRead(BUTTON_STEP) == 1 && digitalRead(BUTTON_VCXO) == 1 && digitalRead(BUTTON_RIT) == 1 && Button_flag == true) {
-      Button_flag = false;
-    if ( menu_count > 0 && menu_count < 128 && setup_flag == false){
-      F_rit();
-    }
-  }
-
-  if(digitalRead(BUTTON_RIT) == 0 && Button_flag == true && menu_count < 255 ) {
-      menu_count++;
-    if (menu_count == 254) {
-      if(setup_flag) {
-        lcd.clear();
-        enc_block = false;
-        display_vfo(Frit);
-        step_flag = 1;
-        setup_flag = false; 
-      } else {
-        enc_flag = true;
-        F_setup();
-      }
-    }
+    Button_flag = false;
   }
 //конец проверок кнопок
 
@@ -274,14 +289,17 @@ void Read_Value_EEPROM() {
   30-33 ( 4 Byte) IF2
   34    ( 1 Byte) x*F
   35    ( 1 Byte) IF_WIDTH_FLAG
+  36-37 ( 2 Byte) ATT_PWR_METER
+  38-39 ( 2 Byte) FWR_ERROR
+  40-41 ( 2 Byte) REF_ERROR
 */
       EEPROM.get(0, IF);     //Первая ПЧ
-      if (IF > 120000000) {
+      if (IF > 120000000 || IF < 0) {
         IF = 0;
         EEPROM.put(0, IF);
       }
       EEPROM.get(8, Fmin);   //Fmin = 10кГц
-      if (Fmin > 4000000000) {
+      if (Fmin > 40000000 || Fmin < 0) {
         Fmin = 10000;
         EEPROM.put(8, Fmin);
       }
@@ -345,6 +363,29 @@ void Read_Value_EEPROM() {
         IF_WIDTH_FLAG = 0;
         EEPROM.put(35, IF_WIDTH_FLAG);
       }
+
+      #ifdef SWR
+        EEPROM.get(36, ATT_PWR_METER);
+        if (ATT_PWR_METER > 10000 || ATT_PWR_METER < -10000) {
+          ATT_PWR_METER = 0;
+          EEPROM.put(36, ATT_PWR_METER);
+        }
+        AttPwrMeter = ATT_PWR_METER / 100.0;
+
+        EEPROM.get(38, FWR_ERROR);
+        if (FWR_ERROR > 10000 || FWR_ERROR < -10000) {
+          FWR_ERROR = 0;
+          EEPROM.put(38, FWR_ERROR);
+        }
+        calibrateFRW = FWR_ERROR / 100.0;
+
+        EEPROM.get(40, REF_ERROR);
+        if (REF_ERROR > 10000 || REF_ERROR < -10000) {
+          REF_ERROR = 0;
+          EEPROM.put(40, REF_ERROR);
+        }
+        calibrateREF = REF_ERROR / 100.0;
+      #endif
 
       STEP = 1000;
       Frit = Ftx;
@@ -414,67 +455,88 @@ void F_rit() {
 }// End F rit
 
 void F_setup() {
-  if (setup_flag == false) {
-    enc_block = true;
-    setup_flag = true;
-
-    lcd.clear();
-    lcd.setCursor(0,0);
-    lcd.print("Setup");
-    delay(400);
-    lcd.clear();
-  }
-
-    if (enc_flag) {
-        if(rit_flag) {
-               setup_count = setup_count+enc_move;
-               if (setup_count > 16) { setup_count = 16;};
-               if (setup_count == 0) { setup_count = 1;};
-        }
-        else {
-          switch (setup_count) {
-            case 1: IF += STEP*enc_move; if(IF > 120000000) IF = 120000000; if(IF > 4000000000) IF = 0; break;
-            case 2: Fmin += STEP*enc_move; if(Fmin < 10000) Fmin=10000; break;
-            case 3: Fmax += STEP*enc_move; if(Fmax > 999000000) Fmax = 999000000; break;
-            case 4: SI5351_FXTAL+=(STEP)*enc_move; if(SI5351_FXTAL > 32*1e6) SI5351_FXTAL=32*1e6; if(SI5351_FXTAL < 14*1e6) SI5351_FXTAL=14*1e6;  break;
-            case 5: Ftx += STEP*enc_move; if(Ftx > Fmax) Ftx=Fmax; if(Ftx < Fmin) Ftx=Fmin; break;
-            case 6: Ftone += (STEP/10)*enc_move; break;
-            case 7: if(enc_move == 1){ ftone_flag = true; tone(tone_pin, Ftone); } if(enc_move == -1){ ftone_flag = false; noTone(tone_pin); }; break;
-            case 8: if(enc_move == 1) { F_eeprom_w(); lcd.setCursor(0,1); lcd.print("    Complite!!! "); delay (1000); }; break; // EEPROM write
-            case 9: if(enc_move == 1) softReset(); break; // soft reboot
-            case 10: if(enc_move == 1) xF = 2; if(enc_move == -1) xF = 1; break; // xF
-            case 11: SI5351_DRIVE_CLK0+=enc_move*2; if(SI5351_DRIVE_CLK0 < 2) SI5351_DRIVE_CLK0 = 2; if(SI5351_DRIVE_CLK0 > 8) SI5351_DRIVE_CLK0 = 8;   break;
-            case 12: SI5351_DRIVE_CLK1+=enc_move*2; if(SI5351_DRIVE_CLK1 < 2) SI5351_DRIVE_CLK1 = 2; if(SI5351_DRIVE_CLK1 > 8) SI5351_DRIVE_CLK1 = 8;   break;
-            case 13: SI5351_DRIVE_CLK2+=enc_move*2; if(SI5351_DRIVE_CLK2 < 2) SI5351_DRIVE_CLK2 = 2; if(SI5351_DRIVE_CLK2 > 8) SI5351_DRIVE_CLK2 = 8;   break;
-            case 14: if(enc_move == 1) ENC_SPIN = 1; if(enc_move == -1) ENC_SPIN = -1; break;
-            case 15: IF2+=(STEP*100)*enc_move; if(IF2 > 4200000000) IF2 = 0; if(IF2 > 4000000000) IF2 = 4000000000; break;
-            case 16: if(enc_move == 1) { IF_WIDTH_FLAG = true; digitalWrite(IF_WIDTH_PIN, HIGH);}; if(enc_move == -1) { IF_WIDTH_FLAG = false; digitalWrite(IF_WIDTH_PIN, LOW);}; break;
-          }
-        }
-
-        lcd.clear();
-        lcd.setCursor(0,0);
-
+  if (enc_flag) {
+      if(rit_flag) {
+              setup_count = setup_count + enc_move;
+              if (setup_count > 19) { setup_count = 19;};
+              if (setup_count == 0) { setup_count = 1;};
+      }
+      else {
         switch (setup_count) {
-          case 1:   lcd.print("IF");lcd.setCursor(0,1);lcd.print(IF); break;
-          case 2:   lcd.print("Fmin");lcd.setCursor(0,1);lcd.print(Fmin); break;
-          case 3:   lcd.print("Fmax");lcd.setCursor(0,1);lcd.print(Fmax); break;
-          case 4:   lcd.print("SI5351_FXTAL");lcd.setCursor(0,1);lcd.print(SI5351_FXTAL); break;
-          case 5:   lcd.print("Ftx");lcd.setCursor(0,1);lcd.print(Ftx); break;
-          case 6:   lcd.print("Ftone");lcd.setCursor(0,1);lcd.print(Ftone); break;
-          case 7:   lcd.print("Ftone On/Off");lcd.setCursor(0,1);if( ftone_flag) lcd.print("On"); else lcd.print("Off"); break;
-          case 8:   lcd.print("EEPROM Write"); lcd.setCursor(0,1); lcd.print("No/Yes?"); break;
-          case 9:   lcd.print("Reboot No/Yes?"); break;
-          case 10:  lcd.print("xF"); lcd.setCursor(0,1);lcd.print(xF);break;
-          case 11:  lcd.print("DRIVE_CLK0"); lcd.setCursor(0,1);lcd.print(SI5351_DRIVE_CLK0);break;
-          case 12:  lcd.print("DRIVE_CLK1"); lcd.setCursor(0,1);lcd.print(SI5351_DRIVE_CLK1);break;
-          case 13:  lcd.print("DRIVE_CLK2"); lcd.setCursor(0,1);lcd.print(SI5351_DRIVE_CLK2);break;
-          case 14:  lcd.print("ENC_SPIN"); lcd.setCursor(0,1);lcd.print(ENC_SPIN);break;
-          case 15:  lcd.print("IF2");lcd.setCursor(0,1);lcd.print(IF2/100); break;
-          case 16:  lcd.print("IF_WIDTH_PIN"); lcd.setCursor(0,1); if (IF_WIDTH_FLAG) lcd.print("ON"); else lcd.print("OFF"); break;
+          case 1: IF += STEP*enc_move; if(IF > 100e6) IF = 100e6; if(IF < 0) IF = 0; break;
+          case 2: Fmin += STEP*enc_move; if(Fmin < 10000) Fmin = 10000; break;
+          case 3: Fmax += STEP*enc_move; if(Fmax > 999e6) Fmax = 999e6; break;
+          case 4:
+              SI5351_FXTAL += (STEP) * enc_move; 
+              if(SI5351_FXTAL > 32e6) SI5351_FXTAL=32e6; 
+              if(SI5351_FXTAL < 10e6) SI5351_FXTAL=10e6;
+            break;
+          case 5: Ftx += STEP*enc_move; if(Ftx > Fmax) Ftx=Fmax; if(Ftx < Fmin) Ftx=Fmin; break;
+          case 6: Ftone += (STEP/10)*enc_move; break;
+          case 7: if(enc_move == 1){ ftone_flag = true; tone(tone_pin, Ftone); } if(enc_move == -1){ ftone_flag = false; noTone(tone_pin); }; break;
+          case 8: if(enc_move == 1) { 
+              F_eeprom_w();
+              lcd.setCursor(0,1);
+              lcd.print("    Complite!!! ");
+              delay(300);
+              rit_flag = true;
+            }; 
+            break; // EEPROM write
+          case 9: if(enc_move == 1) softReset(); break; // soft reboot
+          case 10: if(enc_move == 1) xF = 2; if(enc_move == -1) xF = 1; break; // xF
+          case 11: SI5351_DRIVE_CLK0+=enc_move*2; if(SI5351_DRIVE_CLK0 < 2) SI5351_DRIVE_CLK0 = 2; if(SI5351_DRIVE_CLK0 > 8) SI5351_DRIVE_CLK0 = 8;   break;
+          case 12: SI5351_DRIVE_CLK1+=enc_move*2; if(SI5351_DRIVE_CLK1 < 2) SI5351_DRIVE_CLK1 = 2; if(SI5351_DRIVE_CLK1 > 8) SI5351_DRIVE_CLK1 = 8;   break;
+          case 13: SI5351_DRIVE_CLK2+=enc_move*2; if(SI5351_DRIVE_CLK2 < 2) SI5351_DRIVE_CLK2 = 2; if(SI5351_DRIVE_CLK2 > 8) SI5351_DRIVE_CLK2 = 8;   break;
+          case 14: if(enc_move == 1) ENC_SPIN = 1; if(enc_move == -1) ENC_SPIN = -1; break;
+          case 15: IF2+=(STEP*100)*enc_move; if(IF2 > 4200000000) IF2 = 0; if(IF2 > 4000000000) IF2 = 4000000000; break;
+          case 16: if(enc_move == 1) { IF_WIDTH_FLAG = true; digitalWrite(IF_WIDTH_PIN, HIGH);}; if(enc_move == -1) { IF_WIDTH_FLAG = false; digitalWrite(IF_WIDTH_PIN, LOW);}; break;
+          case 17: ATT_PWR_METER += (STEP/10)*enc_move; AttPwrMeter = ATT_PWR_METER / 100.0;
+            break;
+          case 18: FWR_ERROR += (STEP/10)*enc_move; calibrateFRW = FWR_ERROR / 100.0;
+            break;
+          case 19: REF_ERROR += (STEP/10)*enc_move; calibrateREF = REF_ERROR / 100.0;
+            break;
         }
-      enc_flag = false;
-    }
+      }
+
+      lcd.clear();
+      lcd.setCursor(0,0);
+      switch (setup_count) {
+        case 1:   lcd.print("IF");lcd.setCursor(0,1);lcd.print(IF); break;
+        case 2:   lcd.print("Fmin");lcd.setCursor(0,1);lcd.print(Fmin); break;
+        case 3:   lcd.print("Fmax");lcd.setCursor(0,1);lcd.print(Fmax); break;
+        case 4:   lcd.print("SI5351_FXTAL");lcd.setCursor(0,1);lcd.print(SI5351_FXTAL); break;
+        case 5:   lcd.print("Ftx");lcd.setCursor(0,1);lcd.print(Ftx); break;
+        case 6:   lcd.print("Ftone");lcd.setCursor(0,1);lcd.print(Ftone); break;
+        case 7:   lcd.print("Ftone On/Off");lcd.setCursor(0,1);if( ftone_flag) lcd.print("On"); else lcd.print("Off"); break;
+        case 8:   lcd.print("EEPROM Write"); lcd.setCursor(0,1); lcd.print("No/Yes?"); break;
+        case 9:   lcd.print("Reboot No/Yes?"); break;
+        case 10:  lcd.print("xF"); lcd.setCursor(0,1);lcd.print(xF);break;
+        case 11:  lcd.print("DRIVE_CLK0"); lcd.setCursor(0,1);lcd.print(SI5351_DRIVE_CLK0);break;
+        case 12:  lcd.print("DRIVE_CLK1"); lcd.setCursor(0,1);lcd.print(SI5351_DRIVE_CLK1);break;
+        case 13:  lcd.print("DRIVE_CLK2"); lcd.setCursor(0,1);lcd.print(SI5351_DRIVE_CLK2);break;
+        case 14:  lcd.print("ENC_SPIN"); lcd.setCursor(0,1);lcd.print(ENC_SPIN);break;
+        case 15:  lcd.print("IF2");
+                  lcd.setCursor(0,1);lcd.print(IF2/100);
+          break;
+        case 16:  lcd.print("1.6 IF_WIDTH_PIN");
+                  lcd.setCursor(0,1); if (IF_WIDTH_FLAG) lcd.print("ON"); else lcd.print("OFF");
+          break;
+        case 17:  lcd.print("1.7 ATT_PWR(db)");
+                  lcd.setCursor(0, 1);
+                  lcd.print(AttPwrMeter);
+          break;
+        case 18:  lcd.print("1.8 FWR Error");
+                  lcd.setCursor(0, 1);
+                  lcd.print(calibrateFRW);
+          break;
+        case 19:  lcd.print("1.9 Ref Error");
+                  lcd.setCursor(0, 1);
+                  lcd.print(calibrateREF);
+          break;
+      }
+    enc_flag = false;
+  }
 }// End F setup
 
 void F_eeprom_w() {
@@ -558,6 +620,29 @@ long temp_l=0;
         IF_WIDTH_FLAG = temp;
         EEPROM.put(35, IF_WIDTH_FLAG);
       }
+
+      #ifdef SWR
+        temp = ATT_PWR_METER;
+        EEPROM.get(36, ATT_PWR_METER); // ATT PWR Meter
+        if (ATT_PWR_METER != temp) {
+          ATT_PWR_METER = temp;
+          EEPROM.put(36, ATT_PWR_METER);
+        }
+
+        temp = FWR_ERROR;
+        EEPROM.get(38, FWR_ERROR); // FWR_ERROR
+        if (FWR_ERROR != temp) {
+          FWR_ERROR = temp;
+          EEPROM.put(38, FWR_ERROR);
+        }
+
+        temp = REF_ERROR;
+        EEPROM.get(40, REF_ERROR); // REF_ERROR
+        if (REF_ERROR != temp) {
+          REF_ERROR = temp;
+          EEPROM.put(40, REF_ERROR);
+        }
+      #endif
 }
 
 void display_vfo(int32_t f) {
@@ -580,43 +665,69 @@ void softReset() {
 
 void _5msFunction() {
   CHECK_BUTTON_PRESS();
-  
+
   #ifdef SWR
-    adc_poll(analogInputFWD, analogInputREF);
-    pswr_determine_dBm();                       // Convert raw A/D values to dBm
-    determine_power_and_swr();                  // Calculate power and swr, diode detector
+    if (tx_flag) {
+      adc_poll(analogInputFWD, analogInputREF);
+      determine_dBm_5ms();                       // Convert raw A/D values to dBm
+      determine_power_and_swr();                  // Calculate power and swr, diode detector
+    }
   #endif
 }
 
 void _100msFunction() {
   if (tx_flag) {
     #ifdef SWR
-      lcd.setCursor(11, 0);
-      lcd.print("AM   ");
-      lcd.setCursor(14, 0);
-      //lcd.print((int)modulation_index);
-      lcd.print((int)power_db_pk);
+      smeter_cnt++;
+      if(smeter_cnt > 2) {
+        smeter_cnt = 0;
 
-      lcd.setCursor(0, 1);
-      lcd.print("P     ");
-      lcd.setCursor(2, 1);
-      lcd.print((int)power_db_pep);
+        lcd.setCursor(11, 0);
+        lcd.print(Vfwd);
+        //lcd.print("AM   ");
+        //lcd.setCursor(13, 0);
+        //lcd.print((uint8_t)modulation_index);
 
-      lcd.setCursor(7, 1);
-      lcd.print(" SWR ");
-      lcd.print("     ");
-      lcd.setCursor(12, 1);
-      lcd.print(swr);
+        lcd.setCursor(0, 1);
+        lcd.print("P       ");
+        lcd.setCursor(2, 1);
+        //lcd.print((int)power_pk_100ms);
+        lcd.print(power_pep_1s);
+        //lcd.print(fwd_power_5ms);
+        //lcd.print(fwd_dbm);
+
+        lcd.setCursor(7, 1);
+        lcd.print(" SWR ");
+        lcd.print("     ");
+        lcd.setCursor(12, 1);
+        lcd.print(swr);
+      }
     #endif
   } else {
     if (setup_flag) return;
 
+    if (vcxo_flag == true) {
+        lcd.setCursor(14,0);
+        lcd.print("IF");
+    }
+
+    if (rit_flag == true) {
+      lcd.setCursor(10,0);
+      lcd.print("RIT");
+    }
+
+
     uint16_t tmp = AdcReadAvrValue(Smeter);
     uSMETER = (tmp + uSMETER)/2;
-    lcd.setCursor(0,1);
-    lcd.print("    ");
-    lcd.setCursor(0,1);
-    lcd.print(uSMETER);
+
+    smeter_cnt++;
+    if(smeter_cnt > 2) {
+      smeter_cnt = 0;
+      lcd.setCursor(0,1);
+      lcd.print("    ");
+      lcd.setCursor(0,1);
+      lcd.print(uSMETER);
+    }
   }
 }
 
