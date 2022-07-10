@@ -144,6 +144,8 @@ void determine_dBm_5ms(void) {
   fwd_dbm = AttPwrMeter + (10 * log10((Vfwd * Vfwd) / 50) + 30) + calibrateFRW;
   ref_dbm = AttPwrMeter + (10 * log10((Vref * Vref) / 50) + 30) + calibrateREF;
 #else
+  Vfwd = (fwd_raw * aref) / 1024.0;
+  Vref = (ref_raw * aref) / 1024.0;
 
   fwd_dbm = Vfwd / 0.025;
   fwd_dbm = -75.0 + AttPwrMeter + fwd_dbm + calibrateFRW;
