@@ -9,8 +9,9 @@
 #ifdef SWR
   #define analogInputFWD    A2
   #define analogInputREF    A1
-  #define PEP_BUFFER               20 // Buffer size for 1s PEP measurement
-  #define BUF_100ms                30  // Buffer size for 100ms PK measurement
+  #define BUFER_MAX_5ms               50        // Buffer size for 100ms max measurement
+  #define PEP_BUFFER                  10 // Buffer size for 1s PEP measurement
+  #define BUF_100ms                   20  // Buffer size for 100ms PK measurement
 
   const	double aref = 4.98;	// (Normally an External 4.96V reference)
 
@@ -21,24 +22,27 @@
 
   double       fwd_dbm;
   double       ref_dbm;
-  double		   swr = 1.0;					             // SWR as an absolute value
+  double       v_fwd, v_ref;         // Calculated voltage
+  double		   swr = 1.0;					   // SWR as an absolute value
 
   double       calibrateFRW =        0.0;
   double       calibrateREF =        0.0;
 
-  double       fwd_power_5ms, ref_power_5ms;
+  double       fwd_power_100us, ref_power_100us, fwd_power_5ms;
 
-  uint16_t     a;                              // PEP ring buffer counter
-  uint16_t     db_buff_1s[PEP_BUFFER];         // dB voltage information in a one second window
+  uint32_t     b, _100us_count, _1s_count;                              // PEP ring buffer counter
+  static uint32_t db_buff_max_5ms[BUFER_MAX_5ms];
+  static uint32_t db_buff_100ms[BUF_100ms];                  // dB voltage information in a one second window
+  static uint32_t db_buff_1s[PEP_BUFFER];                    // dB voltage information in a one second window
 
-  uint16_t     power_pep_1s;                   // Calculated PEP power in dBm
+  uint32_t     power_pep_1s;                   // Calculated PEP power in dBm
   double       power_pk_100ms;                 // Calculated 100ms peak power in dBm
 
   double       modulation_index =    0.0;
 
-  int16_t      ATT_PWR_METER =       0;
-  int16_t      FWR_ERROR =           0;
-  int16_t      REF_ERROR =           0;
+  int32_t      ATT_PWR_METER =       0;
+  int32_t      FWR_ERROR =           0;
+  int32_t      REF_ERROR =           0;
 #endif
 
 #define BUTTON_TONE    A3
@@ -71,7 +75,7 @@
 
 Si5351 si5351;
 
-unsigned long _5msTime, _100msTime, _1000msTime;
+unsigned long _100usTime, _5msTime, _100msTime, _1000msTime;
 int32_t IF, IF2, Fmin, Fmax, Ftx = 3100000, Frit = Ftx, STEP;
 int32_t SI5351_FXTAL;
 
@@ -121,7 +125,7 @@ void adc_poll(uint8_t analogInputFWD, uint8_t analogInputREF) {
   ref_raw = analogRead(analogInputREF);
 }
 
-void determine_dBm_5ms(void) {
+void determine_dBm(void) {
   //uint16_t temp;
 
   //if (fwd_raw < ref_raw) {
@@ -160,23 +164,12 @@ double calculate_SWR(double v_fwd, double v_rev) {
 }
 
 void calculate_pk_pep_avg(double v_fwd) {
-  // For measurement of peak and average power
-  static uint32_t db_buff_100ms[BUF_100ms];           // dB voltage information in a one second window
-  
-  static uint16_t voltage_buff_1s[PEP_BUFFER];
-
-  static uint16_t b;                            // 100ms ring buffer counter
-
-  double v_max = 0, v_avg = 0;
+//  double v_max = 0, v_avg = 0;
 
   // Find peaks and averages
   db_buff_100ms[b] = 100 * fwd_power_5ms;
-  voltage_buff_1s[a] = 100 * v_fwd;
-
-  a++;
   b++;
-  if (a > PEP_BUFFER - 1) a = 0;
-  if (b > BUF_100ms - 1) b = 0;
+  if (b >= BUF_100ms) b = 0;
 
   // Find Peak value within a 100ms sliding window
   uint32_t pk = 0;
@@ -186,26 +179,17 @@ void calculate_pk_pep_avg(double v_fwd) {
 
   power_pk_100ms = pk / 100.0;
 
-  db_buff_1s[a] = power_pk_100ms;
-
   // Retrieve Max Value within a 1 second sliding window
-  uint16_t pep = 0;
-  for (uint8_t x = 0; x < PEP_BUFFER; x++) {
-    if (pep < db_buff_1s[x]) pep = db_buff_1s[x];
-  }
-  power_pep_1s = pep;
+//  uint16_t vmax = 0;
+//  for (uint16_t x = 0; x < PEP_BUFFER; x++) {
+//    v_avg = (v_avg + voltage_buff_1s[x]) / 2;
+//    if (vmax < voltage_buff_1s[x]) vmax = voltage_buff_1s[x];
+//  }
 
-  // Retrieve Max Value within a 1 second sliding window
-  uint16_t vmax = 0;
-  for (uint16_t x = 0; x < PEP_BUFFER; x++) {
-    v_avg = (v_avg + voltage_buff_1s[x]) / 2;
-    if (vmax < voltage_buff_1s[x]) vmax = voltage_buff_1s[x];
-  }
-
-  v_max = vmax / 100.0;
+//  v_max = vmax / 100.0;
 
 	// Amplitude Modulation index
-	modulation_index = abs(100.0 * (v_max-v_avg)/v_avg);
+//	modulation_index = abs(100.0 * (v_max-v_avg)/v_avg);
 }
 
 /*
@@ -216,18 +200,6 @@ void calculate_pk_pep_avg(double v_fwd) {
   v_fwd = pow(10, fwd_dbm/20.0);
 */
 void determine_power_and_swr(void) {
-  double      v_fwd, v_ref;                          // Calculated voltage
-
-  // Instantaneous forward voltage and power, milliwatts and dBm
-  v_fwd = pow(10, fwd_dbm/20.0);		        // (We use voltage later on, for SWR calc)
-  // Instantaneous reverse voltage and power
-  v_ref = pow(10, ref_dbm/20.0);
-
-  fwd_power_5ms = pow(10, (fwd_dbm - 30) / 10.0);
-  ref_power_5ms = pow(10, (ref_dbm - 30) / 10.0);
-
-  calculate_pk_pep_avg(v_fwd);                       // Determine Peak, PEP and AVG
-  swr = calculate_SWR(v_fwd, v_ref);            // and determine SWR
 }
 #endif
 

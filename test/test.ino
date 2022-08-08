@@ -118,6 +118,32 @@ void encTick() {
 }
 
 void loop() {
+  if (micros() - _100usTime > 100) {
+    _100usTime = micros();
+
+    #ifdef SWR
+      if (tx_flag) {
+        adc_poll(analogInputFWD, analogInputREF);
+        determine_dBm();
+
+        fwd_power_100us = pow(10, (fwd_dbm - 30) / 10.0);
+        ref_power_100us = pow(10, (ref_dbm - 30) / 10.0);
+
+        _100us_count++;
+        if (_100us_count >= BUFER_MAX_5ms) _100us_count = 0;
+
+        db_buff_max_5ms[_100us_count] = 100 * fwd_power_100us;
+
+        uint32_t pk_5ms = 0;
+        for (uint8_t i = 0; i < BUFER_MAX_5ms; i++) {
+          if (pk_5ms < db_buff_max_5ms[i]) pk_5ms = db_buff_max_5ms[i];
+        }
+
+        fwd_power_5ms = pk_5ms / 100.0;
+      }
+    #endif
+  }
+
   if (millis() - _5msTime > 5) {
     _5msTime = millis();
     _5msFunction();
@@ -668,9 +694,13 @@ void _5msFunction() {
 
   #ifdef SWR
     if (tx_flag) {
-      adc_poll(analogInputFWD, analogInputREF);
-      determine_dBm_5ms();                       // Convert raw A/D values to dBm
-      determine_power_and_swr();                  // Calculate power and swr, diode detector
+      // Instantaneous forward voltage and power, milliwatts and dBm
+      v_fwd = pow(10, fwd_dbm/20.0);		        // (We use voltage later on, for SWR calc)
+      // Instantaneous reverse voltage and power
+      v_ref = pow(10, ref_dbm/20.0);
+
+      calculate_pk_pep_avg(v_fwd);                  // Determine Peak, PEP and AVG
+      swr = calculate_SWR(v_fwd, v_ref);            // and determine SWR
     }
   #endif
 }
@@ -678,6 +708,17 @@ void _5msFunction() {
 void _100msFunction() {
   if (tx_flag) {
     #ifdef SWR
+      _1s_count++;
+      if (_1s_count >= PEP_BUFFER) _1s_count = 0;
+      db_buff_1s[_1s_count] = power_pk_100ms;
+
+      // Retrieve Max Value within a 1 second sliding window
+      uint16_t pep = 0;
+      for (uint8_t x = 0; x < PEP_BUFFER; x++) {
+        if (pep < db_buff_1s[x]) pep = db_buff_1s[x];
+      }
+      power_pep_1s = pep;
+
       smeter_cnt++;
       if(smeter_cnt > 2) {
         smeter_cnt = 0;
