@@ -205,16 +205,32 @@ void LiquidCrystal::send (uint8_t value, uint8_t mode)
   uint8_t MSB = 1; //MSB
 
   for(i = 0; i < 8; i++) {
-    if (MSB == 0) 
-        //digitalWrite(_data_pin,(value & (0x01 << i))); // LSB
-        value & (0x01 << i) ? PORTD |= B00010000 : PORTD &= ~B00010000;
-    else
-        //digitalWrite(_data_pin,(value & (0x80 >> i)));  //MSB
-        value & (0x80 >> i) ? PORTD |= B00010000 : PORTD &= ~B00010000;
+    if (MSB == 0) {
+        #if defined(__AVR_ATmega328P__)
+          //digitalWrite(_data_pin,(value & (0x01 << i))); // LSB
+          value & (0x01 << i) ? PORTD |= B00010000 : PORTD &= ~B00010000;
+        #elif defined(STM32F0)
+          digitalWrite(_data_pin,(value & (0x01 << i))); // LSB
+        #endif
+    }
+    else {
+        #if defined(__AVR_ATmega328P__)
+          //digitalWrite(_data_pin,(value & (0x80 >> i)));  //MSB
+          value & (0x80 >> i) ? PORTD |= B00010000 : PORTD &= ~B00010000;
+        #elif defined(STM32F0)
+          digitalWrite(_data_pin,(value & (0x80 >> i)));  //MSB
+        #endif
+    }
+
     STRUB_CLK_PIN;
   }
 
-  //digitalWrite(_data_pin, mode);  //psevdo RS
-  mode ? PORTD |= B00010000 : PORTD &= ~B00010000;
+  #if defined(__AVR_ATmega328P__)
+    //digitalWrite(_data_pin, mode);  //psevdo RS
+    mode ? PORTD |= B00010000 : PORTD &= ~B00010000;
+  #elif defined(STM32F0)
+    digitalWrite(_data_pin, mode);  //psevdo RS
+  #endif
+
   STRUB_EN_PIN;
 }

@@ -484,7 +484,11 @@ void F_setup() {
   if (enc_flag) {
       if(rit_flag) {
               setup_count = setup_count + enc_move;
-              if (setup_count > 19) { setup_count = 19;};
+              #ifdef SWR
+                if (setup_count > 19) { setup_count = 19;};
+              #else
+                if (setup_count > 16) { setup_count = 16;};
+              #endif
               if (setup_count == 0) { setup_count = 1;};
       }
       else {
@@ -516,12 +520,14 @@ void F_setup() {
           case 14: if(enc_move == 1) ENC_SPIN = 1; if(enc_move == -1) ENC_SPIN = -1; break;
           case 15: IF2+=(STEP*100)*enc_move; if(IF2 > 4200000000) IF2 = 0; if(IF2 > 4000000000) IF2 = 4000000000; break;
           case 16: if(enc_move == 1) { IF_WIDTH_FLAG = true; digitalWrite(IF_WIDTH_PIN, HIGH);}; if(enc_move == -1) { IF_WIDTH_FLAG = false; digitalWrite(IF_WIDTH_PIN, LOW);}; break;
-          case 17: ATT_PWR_METER += (STEP/10)*enc_move; AttPwrMeter = ATT_PWR_METER / 100.0;
-            break;
-          case 18: FWR_ERROR += (STEP/10)*enc_move; calibrateFRW = FWR_ERROR / 100.0;
-            break;
-          case 19: REF_ERROR += (STEP/10)*enc_move; calibrateREF = REF_ERROR / 100.0;
-            break;
+          #ifdef SWR
+            case 17: ATT_PWR_METER += (STEP/10)*enc_move; AttPwrMeter = ATT_PWR_METER / 100.0;
+              break;
+            case 18: FWR_ERROR += (STEP/10)*enc_move; calibrateFRW = FWR_ERROR / 100.0;
+              break;
+            case 19: REF_ERROR += (STEP/10)*enc_move; calibrateREF = REF_ERROR / 100.0;
+              break;
+          #endif
         }
       }
 
@@ -548,18 +554,20 @@ void F_setup() {
         case 16:  lcd.print("1.6 IF_WIDTH_PIN");
                   lcd.setCursor(0,1); if (IF_WIDTH_FLAG) lcd.print("ON"); else lcd.print("OFF");
           break;
-        case 17:  lcd.print("1.7 ATT_PWR(db)");
-                  lcd.setCursor(0, 1);
-                  lcd.print(AttPwrMeter);
-          break;
-        case 18:  lcd.print("1.8 FWR Error");
-                  lcd.setCursor(0, 1);
-                  lcd.print(calibrateFRW);
-          break;
-        case 19:  lcd.print("1.9 Ref Error");
-                  lcd.setCursor(0, 1);
-                  lcd.print(calibrateREF);
-          break;
+        #ifdef SWR
+          case 17:  lcd.print("1.7 ATT_PWR(db)");
+                    lcd.setCursor(0, 1);
+                    lcd.print(AttPwrMeter);
+            break;
+          case 18:  lcd.print("1.8 FWR Error");
+                    lcd.setCursor(0, 1);
+                    lcd.print(calibrateFRW);
+            break;
+          case 19:  lcd.print("1.9 Ref Error");
+                    lcd.setCursor(0, 1);
+                    lcd.print(calibrateREF);
+            break;
+        #endif
       }
     enc_flag = false;
   }
@@ -686,7 +694,11 @@ void display_vfo(int32_t f) {
 }
 
 void softReset() {
-  asm volatile ("  jmp 0");
+  #if defined(__AVR_ATmega328P__)
+    asm volatile ("  jmp 0");
+  #elif defined(STM32F0)
+    NVIC_SystemReset();
+  #endif
 }
 
 void _5msFunction() {

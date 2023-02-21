@@ -1,8 +1,11 @@
 #ifndef MAIN_H
 #define MAIN_H
 
+//#define ATMEGA328
+#define STM32F0
+
 #define VERSION   "1.01a"
-#define SWR
+//#define SWR
 
 #define Smeter         A0
 
